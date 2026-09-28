@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" role="img" aria-label="Chirunama">
+  <path d="M60 4C31.3 4 8 27.3 8 56c0 38 52 80 52 80s52-42 52-80C112 27.3 88.7 4 60 4z" fill="#0f5132"/>
+  <path d="M60 26 32 50v32h56V50z" fill="#fbfaf7"/>
+  <path d="M28 52 60 24l32 28" fill="none" stroke="#fbfaf7" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m46 64 10 10 19-20" fill="none" stroke="#0f5132" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
