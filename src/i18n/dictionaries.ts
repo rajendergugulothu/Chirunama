@@ -66,6 +66,7 @@ const en = {
     responds: (m: number) => `Usually replies in ${m} min`,
     listings: "Live listings",
     share: "Share this profile",
+    hello: (name: string) => `Hi ${name}, I found you on Chirunama.`,
   },
   locality: {
     avgRent: "Average rent",
@@ -94,6 +95,7 @@ const en = {
     classified: "Newspaper classified",
     copy: "Copy",
     copied: "Copied",
+    reply: (name: string, code: string) => `Hi ${name}, thanks for your enquiry about ${code} on Chirunama. When would you like to visit?`,
   },
   footer: "Chirunama · Warangal · Hanamkonda · Kazipet",
 };
@@ -163,6 +165,7 @@ const te: Dictionary = {
     responds: (m: number) => `సాధారణంగా ${m} నిమిషాల్లో స్పందిస్తారు`,
     listings: "లైవ్ లిస్టింగ్‌లు",
     share: "ఈ ప్రొఫైల్‌ను షేర్ చేయండి",
+    hello: (name: string) => `నమస్తే ${name}, చిరునామాలో మిమ్మల్ని చూశాను.`,
   },
   locality: {
     avgRent: "సగటు అద్దె",
@@ -191,6 +194,7 @@ const te: Dictionary = {
     classified: "వార్తాపత్రిక క్లాసిఫైడ్",
     copy: "కాపీ",
     copied: "కాపీ అయింది",
+    reply: (name: string, code: string) => `నమస్తే ${name}, చిరునామాలో ${code} గురించి అడిగినందుకు ధన్యవాదాలు. ఎప్పుడు చూడటానికి వస్తారు?`,
   },
   footer: "చిరునామా · వరంగల్ · హనుమకొండ · కాజీపేట",
 };

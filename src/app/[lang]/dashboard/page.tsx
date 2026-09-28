@@ -95,7 +95,7 @@ export default async function DashboardPage() {
                     </span>
                     {stage !== "CLOSED" && (
                       <a
-                        href={whatsappLink(lead.phone, dict.listing.enquiry(lead.listingCode))}
+                        href={whatsappLink(lead.phone, d.reply(lead.name, lead.listingCode))}
                         className="mt-1 w-fit text-xs font-medium text-brand hover:underline"
                       >
                         {dict.listing.whatsapp} →

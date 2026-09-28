@@ -53,7 +53,7 @@ export default async function AgentPage({ params }: PageProps<"/[lang]/agent/[sl
         </div>
         <div className="flex gap-2 sm:flex-col">
           <a
-            href={whatsappLink(broker.phone, `Hi ${broker.displayName}, I found you on Chirunama.`)}
+            href={whatsappLink(broker.phone, dict.broker.hello(broker.displayName))}
             className="rounded-lg bg-brand px-4 py-2 text-center font-medium text-surface"
           >
             {dict.listing.whatsapp}
