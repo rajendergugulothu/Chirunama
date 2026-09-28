@@ -450,7 +450,7 @@ None of these block the launch, but each needs a named owner and professional ad
 
 ## Roadmap
 
-Phase 1 launches all three categories with agreements, then an 8-week validation decides whether we invest in rent tools and property management.
+Phase 1 launches all four categories (rentals, sales, plots, commercial) with agreements, then an 8-week validation decides whether we invest in rent tools and property management.
 
 ```mermaid
 flowchart LR
@@ -471,7 +471,7 @@ The 8-week validation targets decide whether we build the full platform. They ar
 
 | Metric | 8-week validation target | Why it matters |
 | --- | --- | --- |
-| Live listings (rent, sale, plots) | 300+ | Proves we can get supply |
+| Live listings (rent, sale, plots, commercial) | 300+ | Proves we can get supply |
 | Median genuine leads per listing | 5+ | Proves buyers and tenants come |
 | Brokers willing to pay | 15 to 20 | First recurring revenue |
 | Paid agreements | 20+ | Proves in-site transactions work |

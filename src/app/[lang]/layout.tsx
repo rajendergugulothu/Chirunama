@@ -40,6 +40,9 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
             <Link href={`/${lang}/listings`} className="text-sm hover:underline">
               {dict.nav.search}
             </Link>
+            <Link href={`/${lang}/dashboard`} className="text-sm hover:underline">
+              {dict.nav.brokers}
+            </Link>
             <span className="ml-auto" />
             <Suspense>
               <LanguageSwitch current={lang} label={dict.switchTo} />

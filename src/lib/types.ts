@@ -67,3 +67,23 @@ export type Broker = {
   avgResponseMinutes?: number;
   phone: string;
 };
+
+export type LeadSource = "INSTAGRAM" | "WHATSAPP" | "FACEBOOK" | "NEWSPAPER" | "QR" | "SITE";
+export type LeadStage = "NEW" | "CONTACTED" | "VISIT_BOOKED" | "CLOSED";
+
+export type Lead = {
+  id: string;
+  listingCode: string;
+  name: string;
+  phone: string;
+  source: LeadSource;
+  stage: LeadStage;
+  createdAt: string; // ISO date-time
+  visitAt?: string;
+};
+
+export type ListingStats = {
+  code: string;
+  views: number;
+  saves: number;
+};

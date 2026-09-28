@@ -1,4 +1,4 @@
-import { brokers, cities, listings, localities } from "./sample-data";
+import { brokers, cities, leads, listingStats, listings, localities } from "./sample-data";
 import type { Category, Furnishing, Listing } from "./types";
 
 // Read-side repository. Backed by sample data until the Postgres database is provisioned;
@@ -82,4 +82,13 @@ export function allListings() {
 
 export function getCity(slug: string) {
   return cities.find((c) => c.slug === slug);
+}
+
+export function leadsForBroker(slug: string) {
+  const codes = new Set(listingsByBroker(slug).map((l) => l.code));
+  return leads.filter((l) => codes.has(l.listingCode)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function statsFor(code: string) {
+  return listingStats.find((s) => s.code === code) ?? { code, views: 0, saves: 0 };
 }

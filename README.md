@@ -30,6 +30,7 @@ Pages read from sample data in `src/lib/sample-data.ts` through `src/lib/reposit
 | `src/app/[lang]/listings` | Search with category, locality, price, BHK, furnishing, Owner only and Verified only filters |
 | `src/app/[lang]/listings/[code]` | Listing detail: price, details, what was checked and by whom, and WhatsApp and call buttons |
 | `src/app/[lang]/agent/[slug]` | Public broker profile, which shows only that broker's listings |
+| `src/app/[lang]/dashboard` | Broker dashboard on sample data: leads pipeline by stage and source, listing performance, tagged share links, Telugu newspaper classifieds |
 | `src/app/[lang]/locality/[slug]` | Locality page with average prices and live listings |
 | `src/proxy.ts` | Sends share links without a locale (`/agent/ramesh-realty`) to the reader's language and remembers the choice |
 | `src/i18n/dictionaries.ts` | Telugu and English strings |
@@ -43,7 +44,7 @@ City and locality are data, so adding Hyderabad or another town is a configurati
 
 - Posting flow: web form, WhatsApp intake, voice notes and OTP confirmation
 - Accounts and phone OTP sign-in
-- Broker dashboard: leads inbox, pipeline and marketing kit
+- Broker sign-in, moving leads between stages, QR codes and the reel and status-card generators
 - Lead tracking behind the WhatsApp and call buttons, and share-link attribution
 - Map view, saved searches and WhatsApp alerts
 - Agreements (eStamp and eSign) and rent payments through partners

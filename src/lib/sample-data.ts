@@ -1,4 +1,4 @@
-import type { Broker, City, Listing, Locality } from "./types";
+import type { Broker, City, Lead, Listing, ListingStats, Locality } from "./types";
 
 // Sample data for local development only. Prices and people are illustrative, not market data.
 
@@ -145,4 +145,18 @@ export const listings: Listing[] = [
     photos: [],
     lastConfirmedAt: "2026-09-27",
   },
+];
+
+export const leads: Lead[] = [
+  { id: "l1", listingCode: "TC-1003", name: "Srinivas K.", phone: "919000000201", source: "INSTAGRAM", stage: "NEW", createdAt: "2026-09-28T09:40:00+05:30" },
+  { id: "l2", listingCode: "TC-1005", name: "Dr. Anitha R.", phone: "919000000202", source: "NEWSPAPER", stage: "NEW", createdAt: "2026-09-28T08:15:00+05:30" },
+  { id: "l3", listingCode: "TC-1003", name: "Praveen M.", phone: "919000000203", source: "WHATSAPP", stage: "CONTACTED", createdAt: "2026-09-27T18:05:00+05:30" },
+  { id: "l4", listingCode: "TC-1005", name: "Lakshmi Traders", phone: "919000000204", source: "SITE", stage: "VISIT_BOOKED", createdAt: "2026-09-26T11:20:00+05:30", visitAt: "2026-09-29T17:00:00+05:30" },
+  { id: "l5", listingCode: "TC-1003", name: "Ravi Teja P.", phone: "919000000205", source: "QR", stage: "VISIT_BOOKED", createdAt: "2026-09-25T16:45:00+05:30", visitAt: "2026-09-30T10:30:00+05:30" },
+  { id: "l6", listingCode: "TC-1005", name: "Sai Mobiles", phone: "919000000206", source: "FACEBOOK", stage: "CLOSED", createdAt: "2026-09-20T12:00:00+05:30" },
+];
+
+export const listingStats: ListingStats[] = [
+  { code: "TC-1003", views: 412, saves: 27 },
+  { code: "TC-1005", views: 198, saves: 9 },
 ];

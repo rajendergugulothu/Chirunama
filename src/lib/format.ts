@@ -22,3 +22,7 @@ function trim(n: number): string {
 export function whatsappLink(phone: string, text: string): string {
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
+
+export function daysSince(isoDate: string, now: Date = new Date()): number {
+  return Math.max(0, Math.floor((now.getTime() - Date.parse(isoDate)) / (24 * 60 * 60 * 1000)));
+}
