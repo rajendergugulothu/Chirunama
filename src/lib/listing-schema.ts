@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-// One listing engine: shared fields plus category-specific `details`,
-// matching the Core marketplace table in the product spec.
+// One listing engine: shared fields plus category-specific `details`.
 
 const base = z.object({
   localitySlug: z.string().min(1),
