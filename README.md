@@ -1,7 +1,7 @@
 # Chirunama
 Your next address, verified.
 
-Chirunama is a Telugu-first property platform for Warangal, Hanamkonda and Kazipet (the Tricity). It covers listing, discovery, verification, agreements and rent. This repository holds the Phase 1 scaffold: a responsive Next.js PWA and a Postgres + PostGIS data model.
+Chirunama is a Telugu-first property platform for Warangal, Hanamkonda and Kazipet (the Tricity). It covers listing, discovery, verification, agreements and rent. The full product spec is in [docs/product-spec.md](docs/product-spec.md). This repository holds the Phase 1 scaffold: a responsive Next.js PWA and a Postgres + PostGIS data model.
 
 ## Stack
 
