@@ -1,0 +1,370 @@
+// Chirunama data core — Phase 1 of the Tricity Property Platform spec.
+// City and locality are data, never hard-coded, so new cities are added by configuration.
+// Phase 3 maintenance entities (Ticket, Job, Vendor, Invoice) are added when that phase starts.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+enum Role {
+  OWNER
+  TENANT
+  BUYER
+  BROKER
+  BUILDER
+  VENDOR
+  CREATOR
+  ADMIN
+}
+
+enum Language {
+  TE
+  EN
+}
+
+enum Category {
+  RENTAL
+  SALE
+  PLOT
+  COMMERCIAL
+}
+
+enum PropertyType {
+  HOUSE
+  FLAT
+  ROOM
+  PG
+  VILLA
+  PLOT
+  SHOP
+  OFFICE
+  GODOWN
+}
+
+enum ListerType {
+  OWNER
+  BROKER
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_OTP
+  LIVE
+  EXPIRED
+  CLOSED
+  SUSPENDED
+}
+
+enum Furnishing {
+  UNFURNISHED
+  SEMI
+  FULL
+}
+
+enum LeadSource {
+  INSTAGRAM
+  WHATSAPP
+  FACEBOOK
+  NEWSPAPER
+  QR
+  SITE
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  VISIT_BOOKED
+  CLOSED
+}
+
+enum VerificationType {
+  OWNER_VERIFIED
+  VERIFIED_BROKER
+  DOCUMENTS_CHECKED
+  SITE_VISITED
+}
+
+enum VerificationResult {
+  PENDING
+  PASSED
+  FAILED
+}
+
+enum BrokerPlan {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum AgreementKind {
+  RENT
+  SALE_DRAFT
+}
+
+enum AgreementStatus {
+  DRAFT
+  IN_REVIEW
+  STAMPED
+  SIGNED
+  EXPIRED
+}
+
+enum LedgerKind {
+  RENT_CHARGE
+  PAYMENT
+  DEPOSIT
+  LATE_FEE
+}
+
+enum ShareTarget {
+  LISTING
+  PROFILE
+}
+
+enum ActorKind {
+  HUMAN
+  AGENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique // verified by OTP; Aadhaar numbers are never stored
+  name      String?
+  roles     Role[]
+  language  Language @default(TE)
+  createdAt DateTime @default(now())
+
+  brokerProfile      BrokerProfile?
+  listings           Listing[]      @relation("Lister")
+  leads              Lead[]         @relation("Enquirer")
+  properties         Property[]     @relation("PropertyOwner")
+  agreementsAsOwner  Agreement[]    @relation("AgreementOwner")
+  agreementsAsTenant Agreement[]    @relation("AgreementTenant")
+}
+
+model Agency {
+  id         String     @id @default(cuid())
+  name       String
+  slug       String     @unique // custom URL on the Agency plan
+  plan       BrokerPlan @default(AGENCY)
+  logoUrl    String?
+  brandColor String?
+  createdAt  DateTime   @default(now())
+
+  members BrokerProfile[]
+}
+
+model BrokerProfile {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  user            User       @relation(fields: [userId], references: [id])
+  slug            String     @unique // /agent/ramesh-realty
+  displayName     String
+  photoUrl        String?
+  yearsExperience Int?
+  languages       Language[]
+  reraNumber      String?
+  plan            BrokerPlan @default(FREE)
+  agencyId        String?
+  agency          Agency?    @relation(fields: [agencyId], references: [id])
+  localities      Locality[]
+  createdAt       DateTime   @default(now())
+}
+
+model City {
+  id         String     @id @default(cuid())
+  slug       String     @unique
+  nameEn     String
+  nameTe     String
+  // Legal rules (stamp duty, templates, registration) are keyed per state and district.
+  state      String
+  district   String
+  active     Boolean    @default(false)
+  localities Locality[]
+  properties Property[]
+}
+
+model Locality {
+  id              String                                       @id @default(cuid())
+  cityId          String
+  city            City                                         @relation(fields: [cityId], references: [id])
+  slug            String
+  nameEn          String
+  nameTe          String
+  boundary        Unsupported("geometry(MultiPolygon, 4326)")?
+  // Price index, recomputed by the Insights agent (Phase 2).
+  avgRentPerMonth Int?
+  avgSalePerSqft  Int?
+  avgPlotPerSqyd  Int?
+
+  properties Property[]
+  brokers    BrokerProfile[]
+
+  @@unique([cityId, slug])
+}
+
+// One building, many units (flats, shops).
+model Property {
+  id            String                                 @id @default(cuid())
+  cityId        String
+  city          City                                   @relation(fields: [cityId], references: [id])
+  localityId    String
+  locality      Locality                               @relation(fields: [localityId], references: [id])
+  ownerId       String?
+  owner         User?                                  @relation("PropertyOwner", fields: [ownerId], references: [id])
+  address       String?
+  location      Unsupported("geography(Point, 4326)")?
+  units         Unit[]
+  verifications Verification[]
+  createdAt     DateTime                               @default(now())
+}
+
+model Unit {
+  id         String       @id @default(cuid())
+  propertyId String
+  property   Property     @relation(fields: [propertyId], references: [id])
+  type       PropertyType
+  label      String? // "Flat 302", "Shop 4"
+  bhk        Int?
+  areaSqft   Int?
+  areaSqyd   Int? // plots are measured in sq. yards
+  floor      Int?
+  facing     String?
+  listings   Listing[]
+  agreements Agreement[]
+}
+
+model Listing {
+  id                 String        @id @default(cuid())
+  code               String        @unique // "TC-1042", printed on classifieds and QR boards
+  unitId             String
+  unit               Unit          @relation(fields: [unitId], references: [id])
+  category           Category
+  listerId           String
+  lister             User          @relation("Lister", fields: [listerId], references: [id])
+  listerType         ListerType
+  status             ListingStatus @default(DRAFT)
+  titleEn            String
+  titleTe            String
+  descriptionEn      String?
+  descriptionTe      String?
+  price              Int // rupees: monthly rent for rentals, total price otherwise
+  deposit            Int?
+  furnishing         Furnishing?
+  // Category-specific fields, validated by src/lib/listing-schema.ts.
+  details            Json          @default("{}")
+  photos             String[]
+  allowBrokerContact Boolean       @default(true)
+  availableFrom      DateTime?
+  lastConfirmedAt    DateTime      @default(now()) // listings expire unless re-confirmed
+  expiresAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  leads         Lead[]
+  verifications Verification[]
+  shareLinks    ShareLink[]
+
+  @@index([category, status])
+}
+
+model Lead {
+  id            String     @id @default(cuid())
+  listingId     String
+  listing       Listing    @relation(fields: [listingId], references: [id])
+  enquirerId    String?
+  enquirer      User?      @relation("Enquirer", fields: [enquirerId], references: [id])
+  enquirerPhone String?
+  source        LeadSource
+  shareLinkId   String?
+  shareLink     ShareLink? @relation(fields: [shareLinkId], references: [id])
+  stage         LeadStage  @default(NEW)
+  visitAt       DateTime?
+  createdAt     DateTime   @default(now())
+}
+
+model Verification {
+  id           String             @id @default(cuid())
+  type         VerificationType
+  listingId    String?
+  listing      Listing?           @relation(fields: [listingId], references: [id])
+  propertyId   String?
+  property     Property?          @relation(fields: [propertyId], references: [id])
+  brokerUserId String?
+  documents    String[] // object storage keys
+  checklist    Json               @default("[]")
+  reviewer     String? // advocate partner, ops lead or field executive
+  result       VerificationResult @default(PENDING)
+  checkedAt    DateTime?
+  createdAt    DateTime           @default(now())
+}
+
+model Agreement {
+  id           String          @id @default(cuid())
+  kind         AgreementKind   @default(RENT)
+  unitId       String
+  unit         Unit            @relation(fields: [unitId], references: [id])
+  ownerId      String
+  owner        User            @relation("AgreementOwner", fields: [ownerId], references: [id])
+  tenantId     String?
+  tenant       User?           @relation("AgreementTenant", fields: [tenantId], references: [id])
+  status       AgreementStatus @default(DRAFT)
+  termMonths   Int             @default(11) // longer than 12 months routes to a registration step
+  monthlyRent  Int?
+  deposit      Int?
+  terms        Json            @default("{}")
+  eStampRef    String?
+  eSignRef     String?
+  signedPdfKey String?
+  startsOn     DateTime?
+  renewalOn    DateTime?
+  ledger       LedgerEntry[]
+  createdAt    DateTime        @default(now())
+}
+
+// We never hold money: every payment references the licensed gateway's transaction.
+model LedgerEntry {
+  id          String     @id @default(cuid())
+  agreementId String
+  agreement   Agreement  @relation(fields: [agreementId], references: [id])
+  kind        LedgerKind
+  amount      Int
+  dueOn       DateTime?
+  paidAt      DateTime?
+  gatewayRef  String?
+  createdAt   DateTime   @default(now())
+}
+
+model ShareLink {
+  id         String      @id @default(cuid())
+  code       String      @unique
+  target     ShareTarget
+  listingId  String?
+  listing    Listing?    @relation(fields: [listingId], references: [id])
+  brokerSlug String?
+  channel    LeadSource
+  clicks     Int         @default(0)
+  leads      Lead[]
+  createdAt  DateTime    @default(now())
+}
+
+model AuditEvent {
+  id        String    @id @default(cuid())
+  actorKind ActorKind
+  actor     String // user id or agent name
+  action    String
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  createdAt DateTime  @default(now())
+
+  @@index([entity, entityId])
+}

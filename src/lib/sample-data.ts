@@ -1,0 +1,162 @@
+import type { Broker, City, Lead, Listing, ListingStats, Locality } from "./types";
+
+// Sample data for local development only. Prices and people are illustrative, not market data.
+
+export const cities: City[] = [
+  {
+    slug: "tricity",
+    name: { en: "Warangal Tricity", te: "వరంగల్ ట్రైసిటీ" },
+    state: "Telangana",
+    district: "Hanumakonda",
+  },
+];
+
+export const localities: Locality[] = [
+  { slug: "hanamkonda", citySlug: "tricity", name: { en: "Hanamkonda", te: "హనుమకొండ" }, avgRentPerMonth: 9500, avgSalePerSqft: 4200 },
+  { slug: "kazipet", citySlug: "tricity", name: { en: "Kazipet", te: "కాజీపేట" }, avgRentPerMonth: 8000, avgSalePerSqft: 3600 },
+  { slug: "subedari", citySlug: "tricity", name: { en: "Subedari", te: "సుబేదారి" }, avgRentPerMonth: 11000, avgSalePerSqft: 4800 },
+  { slug: "hunter-road", citySlug: "tricity", name: { en: "Hunter Road", te: "హంటర్ రోడ్" }, avgRentPerMonth: 10000, avgSalePerSqft: 4500 },
+  { slug: "madikonda", citySlug: "tricity", name: { en: "Madikonda", te: "మడికొండ" }, avgRentPerMonth: 8500, avgPlotPerSqyd: 14000 },
+];
+
+export const brokers: Broker[] = [
+  {
+    slug: "ramesh-realty",
+    displayName: "Ramesh Realty",
+    agency: "Ramesh Realty",
+    yearsExperience: 12,
+    localitySlugs: ["hanamkonda", "subedari", "hunter-road"],
+    languages: ["TE", "EN"],
+    plan: "PRO",
+    verified: true,
+    avgResponseMinutes: 20,
+    phone: "919000000001",
+  },
+  {
+    slug: "kazipet-homes",
+    displayName: "Kazipet Homes",
+    yearsExperience: 5,
+    localitySlugs: ["kazipet", "madikonda"],
+    languages: ["TE"],
+    plan: "FREE",
+    verified: false,
+    phone: "919000000002",
+  },
+];
+
+export const listings: Listing[] = [
+  {
+    code: "TC-1001",
+    category: "RENTAL",
+    propertyType: "FLAT",
+    localitySlug: "hanamkonda",
+    title: { en: "2 BHK flat near Hanamkonda bus stand", te: "హనుమకొండ బస్ స్టాండ్ దగ్గర 2 BHK ఫ్లాట్" },
+    description: {
+      en: "Second floor, lift, covered parking. Family preferred.",
+      te: "రెండో అంతస్తు, లిఫ్ట్, కవర్డ్ పార్కింగ్. కుటుంబాలకు ప్రాధాన్యం.",
+    },
+    price: 12000,
+    deposit: 24000,
+    bhk: 2,
+    areaSqft: 1050,
+    furnishing: "SEMI",
+    details: { tenantPreference: "Family" },
+    listerType: "OWNER",
+    ownerPhone: "919000000101",
+    badges: [{ type: "OWNER_VERIFIED", checkedBy: "Moderation agent", checkedOn: "2026-09-20" }],
+    photos: [],
+    availableFrom: "2026-10-01",
+    lastConfirmedAt: "2026-09-25",
+  },
+  {
+    code: "TC-1002",
+    category: "RENTAL",
+    propertyType: "ROOM",
+    localitySlug: "kazipet",
+    title: { en: "Single room for students near NIT Warangal", te: "NIT వరంగల్ దగ్గర విద్యార్థులకు సింగిల్ రూమ్" },
+    description: { en: "Attached bath, Wi-Fi, semester terms.", te: "అటాచ్డ్ బాత్, Wi-Fi, సెమిస్టర్ ఒప్పందం." },
+    price: 4500,
+    deposit: 4500,
+    furnishing: "FULL",
+    details: { tenantPreference: "Students" },
+    listerType: "BROKER",
+    brokerSlug: "kazipet-homes",
+    ownerPhone: "919000000002",
+    badges: [],
+    photos: [],
+    lastConfirmedAt: "2026-09-24",
+  },
+  {
+    code: "TC-1003",
+    category: "SALE",
+    propertyType: "HOUSE",
+    localitySlug: "subedari",
+    title: { en: "Independent house, 3 BHK, east facing", te: "స్వతంత్ర ఇల్లు, 3 BHK, తూర్పు ముఖం" },
+    description: { en: "G+1, 8 years old, 30 ft road.", te: "G+1, 8 ఏళ్ల పాతది, 30 అడుగుల రోడ్డు." },
+    price: 8500000,
+    bhk: 3,
+    areaSqft: 1800,
+    details: { facing: "East", ageYears: 8, parking: true },
+    listerType: "BROKER",
+    brokerSlug: "ramesh-realty",
+    ownerPhone: "919000000001",
+    badges: [
+      { type: "VERIFIED_BROKER", checkedBy: "Ops lead", checkedOn: "2026-09-10" },
+      { type: "DOCUMENTS_CHECKED", checkedBy: "[advocate partner]", checkedOn: "2026-09-18" },
+    ],
+    photos: [],
+    lastConfirmedAt: "2026-09-26",
+  },
+  {
+    code: "TC-1004",
+    category: "PLOT",
+    propertyType: "PLOT",
+    localitySlug: "madikonda",
+    title: { en: "200 sq. yd plot in approved layout", te: "అనుమతి పొందిన లేఅవుట్‌లో 200 చ. గజాల ప్లాట్" },
+    description: { en: "Near IT park, 33 ft road, clear title.", te: "IT పార్క్ దగ్గర, 33 అడుగుల రోడ్డు." },
+    price: 2800000,
+    areaSqyd: 200,
+    details: { surveyNumber: "123/A", layoutName: "Sri Sai Enclave", roadWidthFt: 33, approvalStatus: "Approved" },
+    listerType: "OWNER",
+    ownerPhone: "919000000102",
+    badges: [
+      { type: "OWNER_VERIFIED", checkedBy: "Moderation agent", checkedOn: "2026-09-15" },
+      { type: "DOCUMENTS_CHECKED", checkedBy: "[advocate partner]", checkedOn: "2026-09-22" },
+      { type: "SITE_VISITED", checkedBy: "Field executive", checkedOn: "2026-09-23" },
+    ],
+    photos: [],
+    lastConfirmedAt: "2026-09-23",
+  },
+  {
+    code: "TC-1005",
+    category: "COMMERCIAL",
+    propertyType: "SHOP",
+    localitySlug: "hunter-road",
+    title: { en: "Ground-floor shop on Hunter Road", te: "హంటర్ రోడ్‌లో గ్రౌండ్ ఫ్లోర్ షాప్" },
+    description: { en: "18 ft frontage, suits retail or clinic.", te: "18 అడుగుల ముందుభాగం, రిటైల్ లేదా క్లినిక్‌కు అనుకూలం." },
+    price: 25000,
+    deposit: 100000,
+    areaSqft: 400,
+    details: { frontageFt: 18, usageType: "Retail" },
+    listerType: "BROKER",
+    brokerSlug: "ramesh-realty",
+    ownerPhone: "919000000001",
+    badges: [{ type: "VERIFIED_BROKER", checkedBy: "Ops lead", checkedOn: "2026-09-10" }],
+    photos: [],
+    lastConfirmedAt: "2026-09-27",
+  },
+];
+
+export const leads: Lead[] = [
+  { id: "l1", listingCode: "TC-1003", name: "Srinivas K.", phone: "919000000201", source: "INSTAGRAM", stage: "NEW", createdAt: "2026-09-28T09:40:00+05:30" },
+  { id: "l2", listingCode: "TC-1005", name: "Dr. Anitha R.", phone: "919000000202", source: "NEWSPAPER", stage: "NEW", createdAt: "2026-09-28T08:15:00+05:30" },
+  { id: "l3", listingCode: "TC-1003", name: "Praveen M.", phone: "919000000203", source: "WHATSAPP", stage: "CONTACTED", createdAt: "2026-09-27T18:05:00+05:30" },
+  { id: "l4", listingCode: "TC-1005", name: "Lakshmi Traders", phone: "919000000204", source: "SITE", stage: "VISIT_BOOKED", createdAt: "2026-09-26T11:20:00+05:30", visitAt: "2026-09-29T17:00:00+05:30" },
+  { id: "l5", listingCode: "TC-1003", name: "Ravi Teja P.", phone: "919000000205", source: "QR", stage: "VISIT_BOOKED", createdAt: "2026-09-25T16:45:00+05:30", visitAt: "2026-09-30T10:30:00+05:30" },
+  { id: "l6", listingCode: "TC-1005", name: "Sai Mobiles", phone: "919000000206", source: "FACEBOOK", stage: "CLOSED", createdAt: "2026-09-20T12:00:00+05:30" },
+];
+
+export const listingStats: ListingStats[] = [
+  { code: "TC-1003", views: 412, saves: 27 },
+  { code: "TC-1005", views: 198, saves: 9 },
+];
