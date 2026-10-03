@@ -141,26 +141,6 @@ enum OutboxStatus {
   LOGGED // no provider configured: written here for development
 }
 
-enum AgreementKind {
-  RENT
-  SALE_DRAFT
-}
-
-enum AgreementStatus {
-  DRAFT
-  IN_REVIEW
-  STAMPED
-  SIGNED
-  EXPIRED
-}
-
-enum LedgerKind {
-  RENT_CHARGE
-  PAYMENT
-  DEPOSIT
-  LATE_FEE
-}
-
 enum ShareTarget {
   LISTING
   PROFILE
@@ -179,18 +159,16 @@ model User {
   language  Language @default(TE)
   createdAt DateTime @default(now())
 
-  sessions           Session[]
-  brokerProfile      BrokerProfile?
-  listings           Listing[]      @relation("Lister")
-  leads              Lead[]         @relation("Enquirer")
-  properties         Property[]     @relation("PropertyOwner")
-  savedSearches      SavedSearch[]
-  favorites          Favorite[]
-  reviews            Review[]
-  flagsRaised        Flag[]         @relation("FlagReporter")
-  documents          Document[]
-  agreementsAsOwner  Agreement[]    @relation("AgreementOwner")
-  agreementsAsTenant Agreement[]    @relation("AgreementTenant")
+  sessions      Session[]
+  brokerProfile BrokerProfile?
+  listings      Listing[]      @relation("Lister")
+  leads         Lead[]         @relation("Enquirer")
+  properties    Property[]     @relation("PropertyOwner")
+  savedSearches SavedSearch[]
+  favorites     Favorite[]
+  reviews       Review[]
+  flagsRaised   Flag[]         @relation("FlagReporter")
+  documents     Document[]
 }
 
 // Database sessions: the cookie holds a random token, the table holds its SHA-256.
@@ -211,9 +189,11 @@ model OtpChallenge {
   attempts   Int       @default(0)
   expiresAt  DateTime
   consumedAt DateTime?
+  ipHash     String? // sha256 of the requesting IP; raw IPs are never stored
   createdAt  DateTime  @default(now())
 
   @@index([phone, createdAt])
+  @@index([ipHash, createdAt])
 }
 
 model Agency {
@@ -246,7 +226,8 @@ model BrokerProfile {
   committedPlan   BrokerPlan?
   committedAt     DateTime?
   verifiedAt      DateTime? // Verified Broker: identity, office and RERA checked by the city ops lead
-  verifiedBy      String?
+  verifiedBy      String? // label shown on the badge, e.g. "Ops lead"
+  verifiedById    String?
   agencyId        String?
   agency          Agency?     @relation(fields: [agencyId], references: [id])
   localities      Locality[]
@@ -322,7 +303,6 @@ model Unit {
   floor      Int?
   facing     String?
   listings   Listing[]
-  agreements Agreement[]
 }
 
 model Listing {
@@ -388,22 +368,21 @@ model Lead {
 }
 
 model Verification {
-  id           String             @id @default(cuid())
-  type         VerificationType
-  listingId    String?
-  listing      Listing?           @relation(fields: [listingId], references: [id])
-  propertyId   String?
-  property     Property?          @relation(fields: [propertyId], references: [id])
-  brokerUserId String?
-  documents    Document[]
+  id         String             @id @default(cuid())
+  type       VerificationType
+  listingId  String?
+  listing    Listing?           @relation(fields: [listingId], references: [id])
+  propertyId String?
+  property   Property?          @relation(fields: [propertyId], references: [id])
+  documents  Document[]
   // Gap checklist from the Document agent: [{ item, status, note }].
-  checklist    Json               @default("[]")
-  notes        String? // what the reviewer says is missing
-  reviewer     String? // advocate partner, ops lead or field executive, as shown on the badge
-  reviewerId   String?
-  result       VerificationResult @default(PENDING)
-  checkedAt    DateTime?
-  createdAt    DateTime           @default(now())
+  checklist  Json               @default("[]")
+  notes      String? // what the reviewer says is missing
+  reviewer   String? // advocate partner, ops lead or field executive, as shown on the badge
+  reviewerId String?
+  result     VerificationResult @default(PENDING)
+  checkedAt  DateTime?
+  createdAt  DateTime           @default(now())
 
   @@index([type, result])
 }
@@ -413,7 +392,7 @@ model Document {
   verificationId String
   verification   Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
   kind           DocumentKind
-  storageKey     String
+  storageKey     String       @unique
   fileName       String
   mimeType       String
   size           Int
@@ -460,72 +439,41 @@ model Review {
 
 // Moderation queue: one-tap reports and Moderation agent flags.
 model Flag {
-  id            String     @id @default(cuid())
-  listingId     String?
-  listing       Listing?   @relation(fields: [listingId], references: [id])
-  source        FlagSource
-  kind          String // DUPLICATE, BROKER_AS_OWNER, ODD_PRICE, SOLD, FAKE, WRONG_DETAILS, OTHER
-  detail        String?
-  reporterId    String?
-  reporter      User?      @relation("FlagReporter", fields: [reporterId], references: [id])
-  status        FlagStatus @default(OPEN)
-  resolvedById  String?
-  resolvedAt    DateTime?
-  createdAt     DateTime   @default(now())
+  id           String     @id @default(cuid())
+  listingId    String?
+  listing      Listing?   @relation(fields: [listingId], references: [id])
+  source       FlagSource
+  kind         String // DUPLICATE, BROKER_AS_OWNER, ODD_PRICE, SOLD, FAKE, WRONG_DETAILS, OTHER
+  detail       String?
+  reporterId   String?
+  reporter     User?      @relation("FlagReporter", fields: [reporterId], references: [id])
+  status       FlagStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime   @default(now())
 
   @@index([status, createdAt])
 }
 
 // Every outgoing WhatsApp or SMS message, sent or (in development) only logged.
 model Outbox {
-  id        String        @id @default(cuid())
-  channel   OutboxChannel
-  to        String
-  template  String? // approved WhatsApp template name
-  body      String
-  status    OutboxStatus  @default(QUEUED)
-  error     String?
-  purpose   String // otp, lead, visit_reminder, saved_search, expiry_reminder
-  createdAt DateTime      @default(now())
-  sentAt    DateTime?
+  id                String        @id @default(cuid())
+  channel           OutboxChannel
+  to                String
+  template          String? // approved WhatsApp template name
+  params            Json? // template parameters, with secrets such as OTP codes redacted
+  language          Language?
+  body              String // with secrets such as OTP codes redacted
+  status            OutboxStatus  @default(QUEUED)
+  error             String?
+  attempts          Int           @default(0)
+  providerMessageId String?
+  purpose           String // otp, lead, visit_reminder, saved_search, expiry_reminder
+  createdAt         DateTime      @default(now())
+  sentAt            DateTime?
 
+  @@index([status, createdAt])
   @@index([createdAt])
-}
-
-model Agreement {
-  id           String          @id @default(cuid())
-  kind         AgreementKind   @default(RENT)
-  unitId       String
-  unit         Unit            @relation(fields: [unitId], references: [id])
-  ownerId      String
-  owner        User            @relation("AgreementOwner", fields: [ownerId], references: [id])
-  tenantId     String?
-  tenant       User?           @relation("AgreementTenant", fields: [tenantId], references: [id])
-  status       AgreementStatus @default(DRAFT)
-  termMonths   Int             @default(11) // longer than 12 months routes to a registration step
-  monthlyRent  Int?
-  deposit      Int?
-  terms        Json            @default("{}")
-  eStampRef    String?
-  eSignRef     String?
-  signedPdfKey String?
-  startsOn     DateTime?
-  renewalOn    DateTime?
-  ledger       LedgerEntry[]
-  createdAt    DateTime        @default(now())
-}
-
-// We never hold money: every payment references the licensed gateway's transaction.
-model LedgerEntry {
-  id          String     @id @default(cuid())
-  agreementId String
-  agreement   Agreement  @relation(fields: [agreementId], references: [id])
-  kind        LedgerKind
-  amount      Int
-  dueOn       DateTime?
-  paidAt      DateTime?
-  gatewayRef  String?
-  createdAt   DateTime   @default(now())
 }
 
 model ShareLink {
@@ -556,4 +504,5 @@ model AuditEvent {
   createdAt DateTime  @default(now())
 
   @@index([entity, entityId])
+  @@index([createdAt])
 }

@@ -1,5 +1,5 @@
-// Plain view types used by pages. They mirror prisma/schema.prisma so the in-memory
-// sample repository can be swapped for Prisma queries without touching the UI.
+// Plain view types used by pages. src/lib/repository.ts reads Postgres through Prisma and
+// src/lib/mappers.ts turns the rows into these shapes, so pages never see database rows.
 
 export type Category = "RENTAL" | "SALE" | "PLOT" | "COMMERCIAL";
 export type ListerType = "OWNER" | "BROKER";
@@ -31,7 +31,7 @@ export type Locality = {
 export type BadgeCheck = {
   type: Badge;
   checkedBy: string; // "Moderation agent", "[advocate partner]", "Field executive"
-  checkedOn: string; // ISO date
+  checkedOn: string; // ISO date (YYYY-MM-DD, India time)
 };
 
 export type Listing = {
@@ -39,6 +39,7 @@ export type Listing = {
   category: Category;
   propertyType: string;
   localitySlug: string;
+  localityName: Bilingual;
   title: Bilingual;
   description: Bilingual;
   price: number; // monthly rent for rentals, total price otherwise

@@ -1,9 +1,8 @@
 import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaClient, type Prisma } from "@/generated/prisma/client";
 
-// Prisma client for the Postgres + PostGIS data core. Not used by pages yet:
-// they read from src/lib/repository.ts until the database is provisioned.
+// Prisma client for the Postgres + PostGIS data core, shared across hot reloads in development.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 export const prisma =
@@ -11,3 +10,7 @@ export const prisma =
   new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+// The client or an interactive transaction: helpers that write take one so callers can
+// group several writes into a single transaction.
+export type Db = Prisma.TransactionClient;

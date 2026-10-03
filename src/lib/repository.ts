@@ -1,129 +1,225 @@
-import { brokers, cities, leads, listingStats, listings, localities, supportPhone } from "./sample-data";
-import type { Badge, Category, Furnishing, Listing, Locality, PlotDocument } from "./types";
+import "server-only";
+import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
+import type { Prisma } from "@/generated/prisma/client";
+import type { ListingFilters } from "./listing-rules";
+import { toBroker, toLead, toListing, toLocality } from "./mappers";
+import type { Broker, Lead, Listing, Locality } from "./types";
 
-// Read-side repository. Backed by sample data until the Postgres database is provisioned;
-// each function maps one-to-one onto a Prisma query against prisma/schema.prisma.
+// Read-side repository: Prisma queries against Postgres, returned as the view types in
+// src/lib/types.ts. Pages never see database rows.
 
-export type ListingFilters = {
-  category?: Category;
-  locality?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  bhk?: number;
-  furnishing?: Furnishing;
-  ownerOnly?: boolean;
-  verifiedOnly?: boolean;
+const PUBLIC_STATUSES = ["LIVE", "EXPIRED"] as const;
+const SEARCH_LIMIT = 100;
+
+const listingSelect = {
+  code: true,
+  category: true,
+  listerType: true,
+  status: true,
+  titleEn: true,
+  titleTe: true,
+  descriptionEn: true,
+  descriptionTe: true,
+  price: true,
+  deposit: true,
+  furnishing: true,
+  details: true,
+  photos: true,
+  allowBrokerContact: true,
+  availableFrom: true,
+  lastConfirmedAt: true,
+  unit: {
+    select: {
+      type: true,
+      bhk: true,
+      areaSqft: true,
+      areaSqyd: true,
+      property: { select: { locality: { select: { slug: true, nameEn: true, nameTe: true } } } },
+    },
+  },
+  lister: {
+    select: {
+      phone: true,
+      brokerProfile: { select: { slug: true, verifiedAt: true, verifiedBy: true } },
+    },
+  },
+  verifications: {
+    select: {
+      type: true,
+      result: true,
+      reviewer: true,
+      checkedAt: true,
+      createdAt: true,
+      documents: { select: { kind: true } },
+    },
+  },
+} satisfies Prisma.ListingSelect;
+
+const localitySelect = {
+  slug: true,
+  nameEn: true,
+  nameTe: true,
+  avgRentPerMonth: true,
+  avgSalePerSqft: true,
+  avgPlotPerSqyd: true,
+  city: { select: { slug: true } },
+} satisfies Prisma.LocalitySelect;
+
+const brokerSelect = {
+  userId: true,
+  slug: true,
+  displayName: true,
+  agencyName: true,
+  yearsExperience: true,
+  languages: true,
+  reraNumber: true,
+  plan: true,
+  verifiedAt: true,
+  user: { select: { phone: true } },
+  localities: { select: { slug: true }, orderBy: { nameEn: "asc" } },
+} satisfies Prisma.BrokerProfileSelect;
+
+const listingOrder: Prisma.ListingOrderByWithRelationInput[] = [{ lastConfirmedAt: "desc" }, { number: "desc" }];
+
+// A check on the listing itself, or a lister whose broker profile is verified.
+const verifiedWhere: Prisma.ListingWhereInput = {
+  OR: [
+    { verifications: { some: { result: "PASSED", type: { not: "VERIFIED_BROKER" } } } },
+    { lister: { brokerProfile: { is: { verifiedAt: { not: null } } } } },
+  ],
 };
 
-const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
-const FURNISHINGS: Furnishing[] = ["UNFURNISHED", "SEMI", "FULL"];
-
-function toInt(value: string | string[] | undefined): number | undefined {
-  if (typeof value !== "string" || value === "") return undefined;
-  const n = Number.parseInt(value, 10);
-  return Number.isFinite(n) && n >= 0 ? n : undefined;
-}
-
-export function parseFilters(params: Record<string, string | string[] | undefined>): ListingFilters {
-  const category = typeof params.category === "string" ? params.category.toUpperCase() : undefined;
-  const furnishing = typeof params.furnishing === "string" ? params.furnishing.toUpperCase() : undefined;
-  return {
-    category: CATEGORIES.find((c) => c === category),
-    locality: typeof params.locality === "string" && params.locality ? params.locality : undefined,
-    minPrice: toInt(params.minPrice),
-    maxPrice: toInt(params.maxPrice),
-    bhk: toInt(params.bhk),
-    furnishing: FURNISHINGS.find((f) => f === furnishing),
-    ownerOnly: params.ownerOnly === "1",
-    verifiedOnly: params.verifiedOnly === "1",
-  };
-}
-
-export const PLOT_DOCUMENTS: PlotDocument[] = ["TITLE", "ENCUMBRANCE", "LAYOUT_APPROVAL"];
-
-export function hasBadge(listing: Listing, badge: Badge): boolean {
-  return listing.badges.some((b) => b.type === badge);
-}
-
-// Plots are promoted only after the advocate has checked their documents.
-export function isPromotable(listing: Listing): boolean {
-  return listing.status === "LIVE" && (listing.category !== "PLOT" || hasBadge(listing, "DOCUMENTS_CHECKED"));
+function searchWhere(filters: ListingFilters): Prisma.ListingWhereInput {
+  const and: Prisma.ListingWhereInput[] = [{ status: "LIVE" }];
+  if (filters.category) and.push({ category: filters.category });
+  if (filters.locality) and.push({ unit: { property: { locality: { slug: filters.locality } } } });
+  if (filters.minPrice !== undefined) and.push({ price: { gte: filters.minPrice } });
+  if (filters.maxPrice !== undefined) and.push({ price: { lte: filters.maxPrice } });
+  if (filters.bhk !== undefined) and.push({ unit: { bhk: filters.bhk } });
+  if (filters.furnishing) and.push({ furnishing: filters.furnishing });
+  if (filters.ownerOnly) and.push({ listerType: "OWNER" });
+  if (filters.verifiedOnly) and.push(verifiedWhere);
+  return { AND: and };
 }
 
 // Search shows only live listings; expired ones come back when the lister re-confirms them.
-export function searchListings(filters: ListingFilters): Listing[] {
-  return listings
-    .filter((l) => l.status === "LIVE")
-    .filter((l) => !filters.category || l.category === filters.category)
-    .filter((l) => !filters.locality || l.localitySlug === filters.locality)
-    .filter((l) => filters.minPrice === undefined || l.price >= filters.minPrice)
-    .filter((l) => filters.maxPrice === undefined || l.price <= filters.maxPrice)
-    .filter((l) => filters.bhk === undefined || l.bhk === filters.bhk)
-    .filter((l) => !filters.furnishing || l.furnishing === filters.furnishing)
-    .filter((l) => !filters.ownerOnly || l.listerType === "OWNER")
-    .filter((l) => !filters.verifiedOnly || l.badges.length > 0)
-    .sort((a, b) => b.lastConfirmedAt.localeCompare(a.lastConfirmedAt));
+export async function searchListings(filters: ListingFilters): Promise<Listing[]> {
+  const rows = await prisma.listing.findMany({
+    where: searchWhere(filters),
+    orderBy: listingOrder,
+    take: SEARCH_LIMIT,
+    select: listingSelect,
+  });
+  return rows.map(toListing);
 }
 
-export function promotedListings(filters: ListingFilters = {}): Listing[] {
-  return searchListings(filters).filter(isPromotable);
+// Plots are promoted only after the advocate has checked their documents.
+export async function promotedListings(filters: ListingFilters = {}): Promise<Listing[]> {
+  const rows = await prisma.listing.findMany({
+    where: {
+      AND: [
+        searchWhere(filters),
+        {
+          OR: [
+            { category: { not: "PLOT" } },
+            { verifications: { some: { type: "DOCUMENTS_CHECKED", result: "PASSED" } } },
+          ],
+        },
+      ],
+    },
+    orderBy: listingOrder,
+    take: SEARCH_LIMIT,
+    select: listingSelect,
+  });
+  return rows.map(toListing);
 }
 
-export function getListing(code: string) {
-  return listings.find((l) => l.code.toLowerCase() === code.toLowerCase());
+// Public detail page: LIVE or EXPIRED only. Codes are matched case-insensitively.
+export async function getListing(code: string): Promise<Listing | undefined> {
+  const row = await prisma.listing.findFirst({
+    where: { code: code.toUpperCase(), status: { in: [...PUBLIC_STATUSES] } },
+    select: listingSelect,
+  });
+  return row ? toListing(row) : undefined;
 }
 
-export function getBroker(slug: string) {
-  return brokers.find((b) => b.slug === slug);
+type BrokerRow = Prisma.BrokerProfileGetPayload<{ select: typeof brokerSelect }>;
+
+async function withResponseTimes(row: BrokerRow): Promise<Broker> {
+  const responseTimes = await prisma.lead.findMany({
+    where: { listing: { listerId: row.userId }, contactedAt: { not: null } },
+    select: { createdAt: true, contactedAt: true },
+  });
+  return toBroker(row, responseTimes);
+}
+
+export async function getBroker(slug: string): Promise<Broker | undefined> {
+  const row = await prisma.brokerProfile.findUnique({ where: { slug }, select: brokerSelect });
+  return row ? withResponseTimes(row) : undefined;
+}
+
+export async function getBrokerForUser(userId: string): Promise<Broker | null> {
+  const row = await prisma.brokerProfile.findUnique({ where: { userId }, select: brokerSelect });
+  return row ? withResponseTimes(row) : null;
 }
 
 // Public pages show live listings only; the broker's own dashboard also sees expired ones.
-export function listingsByBroker(slug: string, { includeExpired = false } = {}) {
-  return listings.filter((l) => l.brokerSlug === slug && (includeExpired || l.status === "LIVE"));
+export async function listingsByBroker(slug: string, { includeExpired = false } = {}): Promise<Listing[]> {
+  const rows = await prisma.listing.findMany({
+    where: {
+      lister: { brokerProfile: { is: { slug } } },
+      status: includeExpired ? { in: [...PUBLIC_STATUSES] } : "LIVE",
+    },
+    orderBy: listingOrder,
+    select: listingSelect,
+  });
+  return rows.map(toListing);
 }
 
-export function getLocality(slug: string) {
-  return localities.find((l) => l.slug === slug);
+export async function getLocality(slug: string): Promise<Locality | undefined> {
+  const row = await prisma.locality.findUnique({ where: { slug }, select: localitySelect });
+  return row ? toLocality(row) : undefined;
 }
 
-export function allLocalities() {
-  return localities;
+export async function allLocalities(): Promise<Locality[]> {
+  const rows = await prisma.locality.findMany({ orderBy: { nameEn: "asc" }, select: localitySelect });
+  return rows.map(toLocality);
 }
 
-export function allBrokers() {
-  return brokers;
+// Leads on any of the broker's listings, newest first. Contains enquirers' phone numbers:
+// only for that broker's own dashboard.
+export async function leadsForBroker(slug: string): Promise<Lead[]> {
+  const rows = await prisma.lead.findMany({
+    where: { listing: { lister: { brokerProfile: { is: { slug } } } } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      enquirerName: true,
+      enquirerPhone: true,
+      enquirer: { select: { name: true, phone: true } },
+      source: true,
+      stage: true,
+      createdAt: true,
+      visitAt: true,
+      listing: { select: { code: true } },
+    },
+  });
+  return rows.map(toLead);
 }
 
-export function allListings() {
-  return listings;
+// Views and saves (favourites) per listing code. Codes that do not exist get zeros.
+export async function listingStats(codes: string[]): Promise<Map<string, { views: number; saves: number }>> {
+  const rows = await prisma.listing.findMany({
+    where: { code: { in: codes } },
+    select: { code: true, views: true, _count: { select: { favorites: true } } },
+  });
+  const stats = new Map(codes.map((code) => [code, { views: 0, saves: 0 }]));
+  for (const row of rows) stats.set(row.code, { views: row.views, saves: row._count.favorites });
+  return stats;
 }
 
-export function getCity(slug: string) {
-  return cities.find((c) => c.slug === slug);
-}
-
-export function leadsForBroker(slug: string) {
-  const codes = new Set(listingsByBroker(slug, { includeExpired: true }).map((l) => l.code));
-  return leads.filter((l) => codes.has(l.listingCode)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-export function statsFor(code: string) {
-  return listingStats.find((s) => s.code === code) ?? { code, views: 0, saves: 0 };
-}
-
-// The locality average a listing's price is compared against: rent per month, sale price per
-// sq. ft or plot price per sq. yd. Commercial has no average yet.
-export function localityAverage(
-  listing: Listing,
-  locality: Locality | undefined,
-): { amount: number; unit: "month" | "sqft" | "sqyd" } | undefined {
-  if (!locality) return undefined;
-  if (listing.category === "RENTAL" && locality.avgRentPerMonth) return { amount: locality.avgRentPerMonth, unit: "month" };
-  if (listing.category === "SALE" && locality.avgSalePerSqft) return { amount: locality.avgSalePerSqft, unit: "sqft" };
-  if (listing.category === "PLOT" && locality.avgPlotPerSqyd) return { amount: locality.avgPlotPerSqyd, unit: "sqyd" };
-  return undefined;
-}
-
-export function supportContact() {
-  return supportPhone;
+// Where one-tap listing reports and "message us" links go.
+export async function supportContact(): Promise<string> {
+  return env().SUPPORT_WHATSAPP;
 }
