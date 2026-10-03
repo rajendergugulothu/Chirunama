@@ -4,9 +4,9 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { CopyButton } from "@/components/copy-button";
-import { daysSince, whatsappLink } from "@/lib/format";
+import { daysSince, formatRupees, whatsappLink } from "@/lib/format";
 import { classifiedText, sharePath } from "@/lib/marketing";
-import { getBroker, getLocality, leadsForBroker, listingsByBroker, statsFor } from "@/lib/repository";
+import { getBroker, getLocality, leadsForBroker, listingsByBroker, localityAverage, statsFor } from "@/lib/repository";
 import type { LeadSource, LeadStage } from "@/lib/types";
 
 // Until sign-in exists, the dashboard shows one sample broker's private view.
@@ -27,7 +27,9 @@ export default async function DashboardPage() {
   const broker = getBroker(SAMPLE_BROKER);
   if (!broker) notFound();
 
-  const own = listingsByBroker(broker.slug);
+  const own = listingsByBroker(broker.slug, { includeExpired: true });
+  const live = own.filter((l) => l.status === "LIVE");
+  const units = { month: dict.listing.perMonth, sqft: dict.locality.perSqft, sqyd: dict.locality.perSqyd };
   const leads = leadsForBroker(broker.slug);
   const views = own.reduce((sum, l) => sum + statsFor(l.code).views, 0);
   const time = new Intl.DateTimeFormat(lang === "te" ? "te-IN" : "en-IN", {
@@ -41,7 +43,7 @@ export default async function DashboardPage() {
   const stats = [
     { label: d.stats.newLeads, value: leads.filter((l) => l.stage === "NEW").length },
     { label: d.stats.visits, value: leads.filter((l) => l.stage === "VISIT_BOOKED").length },
-    { label: d.stats.live, value: own.length },
+    { label: d.stats.live, value: live.length },
     { label: d.stats.views, value: views },
   ];
 
@@ -58,6 +60,7 @@ export default async function DashboardPage() {
         >
           {broker.displayName} · {d.plan} {broker.plan}
         </Link>
+        <p className="w-full rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">{d.launch}</p>
       </header>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -112,13 +115,14 @@ export default async function DashboardPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">{d.performance}</h2>
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[680px] text-sm">
             <thead className="text-left text-muted">
               <tr className="border-b border-line">
                 <th className="p-3 font-medium">{d.cols.listing}</th>
                 <th className="p-3 text-right font-medium">{d.cols.views}</th>
                 <th className="p-3 text-right font-medium">{d.cols.leads}</th>
                 <th className="p-3 text-right font-medium">{d.cols.saves}</th>
+                <th className="p-3 text-right font-medium">{d.cols.average}</th>
                 <th className="p-3 text-right font-medium">{d.cols.confirmed}</th>
               </tr>
             </thead>
@@ -126,6 +130,7 @@ export default async function DashboardPage() {
               {own.map((l) => {
                 const s = statsFor(l.code);
                 const days = daysSince(l.lastConfirmedAt);
+                const average = localityAverage(l, getLocality(l.localitySlug));
                 return (
                   <tr key={l.code} className="border-b border-line last:border-0">
                     <td className="p-3">
@@ -137,7 +142,13 @@ export default async function DashboardPage() {
                     <td className="p-3 text-right tabular-nums">{s.views}</td>
                     <td className="p-3 text-right tabular-nums">{leads.filter((x) => x.listingCode === l.code).length}</td>
                     <td className="p-3 text-right tabular-nums">{s.saves}</td>
-                    <td className={`p-3 text-right ${days > 14 ? "text-accent" : ""}`}>{d.daysAgo(days)}</td>
+                    <td className="p-3 text-right tabular-nums">
+                      {average ? `${formatRupees(average.amount)} ${units[average.unit]}` : "–"}
+                    </td>
+                    <td className={`p-3 text-right ${l.status === "EXPIRED" || days > 14 ? "text-accent" : ""}`}>
+                      {d.daysAgo(days)}
+                      {l.status === "EXPIRED" && <div className="text-xs">{d.expired}</div>}
+                    </td>
                   </tr>
                 );
               })}
@@ -167,7 +178,7 @@ export default async function DashboardPage() {
         <section className="flex min-w-0 flex-col gap-3">
           <h2 className="text-xl font-semibold">{d.classified}</h2>
           <ul className="flex flex-col gap-2">
-            {own.map((l) => {
+            {live.map((l) => {
               const text = classifiedText(l, getLocality(l.localitySlug));
               return (
                 <li key={l.code} className="flex items-start gap-2 rounded-lg border border-line bg-surface p-3 text-sm">

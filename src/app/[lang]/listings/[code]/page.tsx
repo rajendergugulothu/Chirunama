@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { BadgeList } from "@/components/badge-list";
 import { formatPrice, formatRupees, whatsappLink } from "@/lib/format";
-import { getBroker, getListing, getLocality } from "@/lib/repository";
+import { PLOT_DOCUMENTS, getBroker, getListing, getLocality, hasBadge, supportContact } from "@/lib/repository";
 
 export async function generateMetadata({ params }: PageProps<"/[lang]/listings/[code]">): Promise<Metadata> {
   const { code } = await params;
@@ -30,10 +30,15 @@ export default async function ListingPage({ params }: PageProps<"/[lang]/listing
   const broker = listing.brokerSlug ? getBroker(listing.brokerSlug) : undefined;
   const monthly = listing.category === "RENTAL" || listing.category === "COMMERCIAL";
   const enquiry = dict.listing.enquiry(listing.code);
+  const documentsChecked = hasBadge(listing, "DOCUMENTS_CHECKED");
+  const received = new Set(listing.documentsReceived ?? []);
 
   return (
     <article className="grid gap-6 md:grid-cols-[1fr_300px]">
       <div className="flex flex-col gap-4">
+        {listing.status === "EXPIRED" && (
+          <p className="rounded-lg border border-accent px-3 py-2 text-sm text-accent">{dict.listing.expired}</p>
+        )}
         <div className="flex aspect-[16/9] items-center justify-center rounded-xl bg-brand-soft text-muted">
           {listing.code}
         </div>
@@ -93,12 +98,34 @@ export default async function ListingPage({ params }: PageProps<"/[lang]/listing
 
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">{dict.listing.trust}</h2>
-          {listing.badges.length === 0 ? (
-            <p className="text-sm text-accent">{dict.listing.noChecks}</p>
+          <BadgeList badges={listing.badges} labels={dict.badges} detail={dict.badgeDetail} />
+          {listing.category === "PLOT" && !documentsChecked ? (
+            <p className="text-sm text-accent">{dict.listing.plotUnchecked}</p>
           ) : (
-            <BadgeList badges={listing.badges} labels={dict.badges} detail={dict.badgeDetail} />
+            listing.badges.length === 0 && <p className="text-sm text-accent">{dict.listing.noChecks}</p>
           )}
         </section>
+
+        {listing.category === "PLOT" && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold">{dict.listing.documents}</h2>
+            <ul className="flex flex-col gap-1 text-sm">
+              {PLOT_DOCUMENTS.map((doc) => {
+                const status = documentsChecked
+                  ? dict.listing.docChecked
+                  : received.has(doc)
+                    ? dict.listing.docReceived
+                    : dict.listing.docMissing;
+                return (
+                  <li key={doc} className="flex justify-between gap-4 border-b border-line py-1 last:border-0">
+                    <span>{dict.listing.docs[doc]}</span>
+                    <span className={documentsChecked ? "text-brand" : "text-muted"}>{status}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
       </div>
 
       <aside className="flex h-fit flex-col gap-3 rounded-xl border border-line bg-surface p-4 md:sticky md:top-4">
@@ -125,9 +152,26 @@ export default async function ListingPage({ params }: PageProps<"/[lang]/listing
         <a href={`tel:+${listing.ownerPhone}`} className="rounded-lg border border-line px-3 py-2 text-center">
           {dict.listing.call}
         </a>
+        {listing.status === "LIVE" && (
+          <a
+            href={whatsappLink(listing.ownerPhone, dict.listing.visitRequest(listing.code))}
+            className="rounded-lg border border-line px-3 py-2 text-center"
+          >
+            {dict.listing.bookVisit}
+          </a>
+        )}
+        {listing.listerType === "OWNER" && !listing.allowBrokerContact && (
+          <p className="text-xs text-muted">{dict.listing.noBrokers}</p>
+        )}
         <p className="text-xs text-muted">
           {dict.listing.confirmed} {listing.lastConfirmedAt}
         </p>
+        <a
+          href={whatsappLink(supportContact(), dict.listing.reportText(listing.code))}
+          className="text-xs text-muted underline hover:text-accent"
+        >
+          {dict.listing.report}
+        </a>
       </aside>
     </article>
   );
