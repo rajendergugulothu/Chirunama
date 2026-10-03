@@ -2,6 +2,7 @@ import { PLOT_DOCUMENTS } from "./listing-rules";
 import type {
   Badge,
   BadgeCheck,
+  Broker,
   BrokerPlan,
   Category,
   Furnishing,
@@ -11,7 +12,6 @@ import type {
   ListerType,
   Listing,
   Locality,
-  Broker,
 } from "./types";
 
 // Pure row-to-view mappers. The row types list only the columns each mapper reads, so the

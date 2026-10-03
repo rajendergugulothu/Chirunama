@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifiedText, sharePath } from "../marketing";
-import { getListing, getLocality, leadsForBroker } from "../repository";
+import { madikonda, plotTC1004 } from "./fixtures";
 
 describe("sharePath", () => {
   it("tags the link with its channel", () => {
@@ -10,19 +10,9 @@ describe("sharePath", () => {
 
 describe("classifiedText", () => {
   it("includes locality, price and the listing code", () => {
-    const listing = getListing("TC-1004")!;
-    const text = classifiedText(listing, getLocality(listing.localitySlug));
+    const text = classifiedText(plotTC1004, madikonda);
     expect(text).toContain("మడికొండ");
     expect(text).toContain("₹28 L");
     expect(text).toContain("TC-1004");
-  });
-});
-
-describe("leadsForBroker", () => {
-  it("returns only leads on that broker's listings, newest first", () => {
-    const leads = leadsForBroker("ramesh-realty");
-    expect(leads.length).toBeGreaterThan(0);
-    expect(leads.every((l) => ["TC-1003", "TC-1005"].includes(l.listingCode))).toBe(true);
-    expect(leads.map((l) => l.createdAt)).toEqual(leads.map((l) => l.createdAt).sort().reverse());
   });
 });

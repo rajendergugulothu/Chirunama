@@ -144,9 +144,9 @@ export async function getListing(code: string): Promise<Listing | undefined> {
   return row ? toListing(row) : undefined;
 }
 
-type BrokerRow = Prisma.BrokerProfileGetPayload<{ select: typeof brokerSelect }>;
+type BrokerProfileRow = Prisma.BrokerProfileGetPayload<{ select: typeof brokerSelect }>;
 
-async function withResponseTimes(row: BrokerRow): Promise<Broker> {
+async function withResponseTimes(row: BrokerProfileRow): Promise<Broker> {
   const responseTimes = await prisma.lead.findMany({
     where: { listing: { listerId: row.userId }, contactedAt: { not: null } },
     select: { createdAt: true, contactedAt: true },

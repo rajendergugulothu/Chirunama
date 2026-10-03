@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { env, isProduction } from "@/lib/env";
