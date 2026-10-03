@@ -20,7 +20,9 @@ enum Role {
   BUILDER
   VENDOR
   CREATOR
-  ADMIN
+  ADMIN // city ops lead: moderation, broker verification, disputes
+  ADVOCATE // advocate partner: signs off document checks
+  FIELD_EXECUTIVE // site visits and photos
 }
 
 enum Language {
@@ -83,6 +85,12 @@ enum LeadStage {
   CLOSED
 }
 
+enum LeadKind {
+  WHATSAPP // tapped the WhatsApp button
+  CALL // tapped the call button
+  VISIT // asked for a visit through the form
+}
+
 enum VerificationType {
   OWNER_VERIFIED
   VERIFIED_BROKER
@@ -96,10 +104,41 @@ enum VerificationResult {
   FAILED
 }
 
+enum DocumentKind {
+  TITLE
+  ENCUMBRANCE
+  LAYOUT_APPROVAL
+  OWNERSHIP
+  OTHER
+}
+
 enum BrokerPlan {
   FREE
   PRO
   AGENCY
+}
+
+enum FlagSource {
+  USER // one-tap report from a buyer or tenant
+  AGENT // raised by the Moderation agent
+}
+
+enum FlagStatus {
+  OPEN
+  RESOLVED // action taken
+  DISMISSED // nothing wrong
+}
+
+enum OutboxChannel {
+  WHATSAPP
+  SMS
+}
+
+enum OutboxStatus {
+  QUEUED
+  SENT
+  FAILED
+  LOGGED // no provider configured: written here for development
 }
 
 enum AgreementKind {
@@ -140,12 +179,41 @@ model User {
   language  Language @default(TE)
   createdAt DateTime @default(now())
 
+  sessions           Session[]
   brokerProfile      BrokerProfile?
   listings           Listing[]      @relation("Lister")
   leads              Lead[]         @relation("Enquirer")
   properties         Property[]     @relation("PropertyOwner")
+  savedSearches      SavedSearch[]
+  favorites          Favorite[]
+  reviews            Review[]
+  flagsRaised        Flag[]         @relation("FlagReporter")
+  documents          Document[]
   agreementsAsOwner  Agreement[]    @relation("AgreementOwner")
   agreementsAsTenant Agreement[]    @relation("AgreementTenant")
+}
+
+// Database sessions: the cookie holds a random token, the table holds its SHA-256.
+model Session {
+  id        String   @id // sha256 of the cookie token
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
 }
 
 model Agency {
@@ -161,31 +229,44 @@ model Agency {
 }
 
 model BrokerProfile {
-  id              String     @id @default(cuid())
-  userId          String     @unique
-  user            User       @relation(fields: [userId], references: [id])
-  slug            String     @unique // /agent/ramesh-realty
+  id              String      @id @default(cuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id])
+  slug            String      @unique // /agent/ramesh-realty
   displayName     String
+  agencyName      String?
   photoUrl        String?
+  bio             String?
+  officeAddress   String?
   yearsExperience Int?
   languages       Language[]
   reraNumber      String?
-  plan            BrokerPlan @default(FREE)
+  plan            BrokerPlan  @default(FREE)
+  // Plans are free during the launch period; this records a signed commitment to pay after it.
+  committedPlan   BrokerPlan?
+  committedAt     DateTime?
+  verifiedAt      DateTime? // Verified Broker: identity, office and RERA checked by the city ops lead
+  verifiedBy      String?
   agencyId        String?
-  agency          Agency?    @relation(fields: [agencyId], references: [id])
+  agency          Agency?     @relation(fields: [agencyId], references: [id])
   localities      Locality[]
-  createdAt       DateTime   @default(now())
+  reviews         Review[]
+  shareLinks      ShareLink[]
+  createdAt       DateTime    @default(now())
 }
 
 model City {
   id         String     @id @default(cuid())
   slug       String     @unique
+  code       String     @unique // listing code prefix: "TC" for the Tricity
   nameEn     String
   nameTe     String
   // Legal rules (stamp duty, templates, registration) are keyed per state and district.
   state      String
   district   String
   active     Boolean    @default(false)
+  lat        Float
+  lng        Float
   localities Locality[]
   properties Property[]
 }
@@ -194,14 +275,17 @@ model Locality {
   id              String                                       @id @default(cuid())
   cityId          String
   city            City                                         @relation(fields: [cityId], references: [id])
-  slug            String
+  slug            String                                       @unique
   nameEn          String
   nameTe          String
+  lat             Float
+  lng             Float
   boundary        Unsupported("geometry(MultiPolygon, 4326)")?
-  // Locality price index.
+  // Locality price index: plain averages of live listings, recomputed by a job.
   avgRentPerMonth Int?
   avgSalePerSqft  Int?
   avgPlotPerSqyd  Int?
+  avgUpdatedAt    DateTime?
 
   properties Property[]
   brokers    BrokerProfile[]
@@ -211,18 +295,19 @@ model Locality {
 
 // One building, many units (flats, shops).
 model Property {
-  id            String                                 @id @default(cuid())
+  id            String         @id @default(cuid())
   cityId        String
-  city          City                                   @relation(fields: [cityId], references: [id])
+  city          City           @relation(fields: [cityId], references: [id])
   localityId    String
-  locality      Locality                               @relation(fields: [localityId], references: [id])
+  locality      Locality       @relation(fields: [localityId], references: [id])
   ownerId       String?
-  owner         User?                                  @relation("PropertyOwner", fields: [ownerId], references: [id])
+  owner         User?          @relation("PropertyOwner", fields: [ownerId], references: [id])
   address       String?
-  location      Unsupported("geography(Point, 4326)")?
+  lat           Float?
+  lng           Float?
   units         Unit[]
   verifications Verification[]
-  createdAt     DateTime                               @default(now())
+  createdAt     DateTime       @default(now())
 }
 
 model Unit {
@@ -242,6 +327,7 @@ model Unit {
 
 model Listing {
   id                 String        @id @default(cuid())
+  number             Int           @unique @default(autoincrement())
   code               String        @unique // "TC-1042", printed on classifieds and QR boards
   unitId             String
   unit               Unit          @relation(fields: [unitId], references: [id])
@@ -259,17 +345,21 @@ model Listing {
   furnishing         Furnishing?
   // Category-specific fields, validated by src/lib/listing-schema.ts.
   details            Json          @default("{}")
-  photos             String[]
+  photos             String[] // storage keys
   allowBrokerContact Boolean       @default(true)
   availableFrom      DateTime?
+  views              Int           @default(0)
   lastConfirmedAt    DateTime      @default(now()) // listings expire unless re-confirmed
-  expiresAt          DateTime?
+  reminderSentAt     DateTime? // "is it still available?" nudge before expiry
+  intakeSource       String? // form, whatsapp text, post link, newspaper photo
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
   leads         Lead[]
   verifications Verification[]
   shareLinks    ShareLink[]
+  favorites     Favorite[]
+  flags         Flag[]
 
   @@index([category, status])
 }
@@ -280,13 +370,21 @@ model Lead {
   listing       Listing    @relation(fields: [listingId], references: [id])
   enquirerId    String?
   enquirer      User?      @relation("Enquirer", fields: [enquirerId], references: [id])
+  enquirerName  String?
   enquirerPhone String?
+  kind          LeadKind   @default(WHATSAPP)
   source        LeadSource
   shareLinkId   String?
   shareLink     ShareLink? @relation(fields: [shareLinkId], references: [id])
   stage         LeadStage  @default(NEW)
+  message       String?
   visitAt       DateTime?
+  reminderAt    DateTime? // when the visit reminder went out
+  contactedAt   DateTime? // first move past NEW: feeds the broker's response time
+  review        Review?
   createdAt     DateTime   @default(now())
+
+  @@index([listingId, createdAt])
 }
 
 model Verification {
@@ -297,12 +395,101 @@ model Verification {
   propertyId   String?
   property     Property?          @relation(fields: [propertyId], references: [id])
   brokerUserId String?
-  documents    String[] // object storage keys
+  documents    Document[]
+  // Gap checklist from the Document agent: [{ item, status, note }].
   checklist    Json               @default("[]")
-  reviewer     String? // advocate partner, ops lead or field executive
+  notes        String? // what the reviewer says is missing
+  reviewer     String? // advocate partner, ops lead or field executive, as shown on the badge
+  reviewerId   String?
   result       VerificationResult @default(PENDING)
   checkedAt    DateTime?
   createdAt    DateTime           @default(now())
+
+  @@index([type, result])
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  verificationId String
+  verification   Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+  kind           DocumentKind
+  storageKey     String
+  fileName       String
+  mimeType       String
+  size           Int
+  uploadedById   String
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime     @default(now())
+}
+
+model SavedSearch {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filters       Json // ListingFilters
+  language      Language  @default(TE)
+  whatsappOptIn Boolean   @default(false) // explicit opt-in before any WhatsApp alert
+  active        Boolean   @default(true)
+  lastAlertAt   DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+model Favorite {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, listingId])
+}
+
+// Reviews only from people who contacted the broker through the platform.
+model Review {
+  id              String        @id @default(cuid())
+  brokerProfileId String
+  brokerProfile   BrokerProfile @relation(fields: [brokerProfileId], references: [id])
+  authorId        String
+  author          User          @relation(fields: [authorId], references: [id])
+  leadId          String        @unique
+  lead            Lead          @relation(fields: [leadId], references: [id])
+  rating          Int
+  text            String?
+  createdAt       DateTime      @default(now())
+}
+
+// Moderation queue: one-tap reports and Moderation agent flags.
+model Flag {
+  id            String     @id @default(cuid())
+  listingId     String?
+  listing       Listing?   @relation(fields: [listingId], references: [id])
+  source        FlagSource
+  kind          String // DUPLICATE, BROKER_AS_OWNER, ODD_PRICE, SOLD, FAKE, WRONG_DETAILS, OTHER
+  detail        String?
+  reporterId    String?
+  reporter      User?      @relation("FlagReporter", fields: [reporterId], references: [id])
+  status        FlagStatus @default(OPEN)
+  resolvedById  String?
+  resolvedAt    DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@index([status, createdAt])
+}
+
+// Every outgoing WhatsApp or SMS message, sent or (in development) only logged.
+model Outbox {
+  id        String        @id @default(cuid())
+  channel   OutboxChannel
+  to        String
+  template  String? // approved WhatsApp template name
+  body      String
+  status    OutboxStatus  @default(QUEUED)
+  error     String?
+  purpose   String // otp, lead, visit_reminder, saved_search, expiry_reminder
+  createdAt DateTime      @default(now())
+  sentAt    DateTime?
+
+  @@index([createdAt])
 }
 
 model Agreement {
@@ -342,16 +529,19 @@ model LedgerEntry {
 }
 
 model ShareLink {
-  id         String      @id @default(cuid())
-  code       String      @unique
-  target     ShareTarget
-  listingId  String?
-  listing    Listing?    @relation(fields: [listingId], references: [id])
-  brokerSlug String?
-  channel    LeadSource
-  clicks     Int         @default(0)
-  leads      Lead[]
-  createdAt  DateTime    @default(now())
+  id              String         @id @default(cuid())
+  code            String         @unique // /s/<code>
+  target          ShareTarget
+  listingId       String?
+  listing         Listing?       @relation(fields: [listingId], references: [id])
+  brokerProfileId String?
+  brokerProfile   BrokerProfile? @relation(fields: [brokerProfileId], references: [id])
+  channel         LeadSource
+  clicks          Int            @default(0)
+  leads           Lead[]
+  createdAt       DateTime       @default(now())
+
+  @@unique([target, listingId, brokerProfileId, channel])
 }
 
 model AuditEvent {
