@@ -6,6 +6,9 @@ export type ListerType = "OWNER" | "BROKER";
 export type Furnishing = "UNFURNISHED" | "SEMI" | "FULL";
 export type Badge = "OWNER_VERIFIED" | "VERIFIED_BROKER" | "DOCUMENTS_CHECKED" | "SITE_VISITED";
 export type BrokerPlan = "FREE" | "PRO" | "AGENCY";
+export type ListingStatus = "LIVE" | "EXPIRED";
+// The documents a plot's check covers. Sign-off always comes from the advocate partner.
+export type PlotDocument = "TITLE" | "ENCUMBRANCE" | "LAYOUT_APPROVAL";
 
 export type Bilingual = { en: string; te: string };
 
@@ -48,7 +51,10 @@ export type Listing = {
   listerType: ListerType;
   brokerSlug?: string;
   ownerPhone: string;
+  allowBrokerContact: boolean;
+  status: ListingStatus; // listings expire unless the lister re-confirms them
   badges: BadgeCheck[];
+  documentsReceived?: PlotDocument[]; // plots: uploaded and in the gap checklist
   photos: string[];
   availableFrom?: string;
   lastConfirmedAt: string;

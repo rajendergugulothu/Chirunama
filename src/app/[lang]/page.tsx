@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { ListingCard } from "@/components/listing-card";
-import { allLocalities, searchListings } from "@/lib/repository";
+import { allLocalities, promotedListings } from "@/lib/repository";
 import type { Category } from "@/lib/types";
 
 const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
@@ -9,7 +9,9 @@ const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
 export default async function Home() {
   const lang = await getLocale();
   const dict = await getDictionary();
-  const latest = searchListings({}).slice(0, 3);
+  const latest = promotedListings().slice(0, 3);
+  const checkedPlots = promotedListings({ category: "PLOT" }).slice(0, 3);
+  const labels = { perMonth: dict.listing.perMonth, lister: dict.lister, badges: dict.badges };
 
   return (
     <div className="flex flex-col gap-10">
@@ -48,16 +50,25 @@ export default async function Home() {
         </div>
       </section>
 
+      {checkedPlots.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-semibold">{dict.home.checkedPlots}</h2>
+            <p className="text-sm text-muted">{dict.home.checkedPlotsBody}</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {checkedPlots.map((l) => (
+              <ListingCard key={l.code} listing={l} lang={lang} labels={labels} />
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">{dict.home.latest}</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {latest.map((l) => (
-            <ListingCard
-              key={l.code}
-              listing={l}
-              lang={lang}
-              labels={{ perMonth: dict.listing.perMonth, lister: dict.lister, badges: dict.badges }}
-            />
+            <ListingCard key={l.code} listing={l} lang={lang} labels={labels} />
           ))}
         </div>
       </section>

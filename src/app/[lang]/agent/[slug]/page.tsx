@@ -1,27 +1,40 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { ListingCard } from "@/components/listing-card";
 import { whatsappLink } from "@/lib/format";
-import { getBroker, getLocality, listingsByBroker } from "@/lib/repository";
+import { getBroker, getLocality, hasBadge, isPromotable, listingsByBroker, parseFilters } from "@/lib/repository";
+import type { Category } from "@/lib/types";
+
+const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
 
 export async function generateMetadata({ params }: PageProps<"/[lang]/agent/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const broker = getBroker(slug);
   if (!broker) return {};
-  const count = listingsByBroker(slug).length;
-  const description = `${broker.displayName} · ${count} live listings`;
+  const lang = await getLocale();
+  const own = listingsByBroker(slug);
+  // Rich link preview: name, live listing count and a featured property.
+  const featured = own.find(isPromotable);
+  const description = [`${broker.displayName} · ${own.length} live listings`, featured?.title[lang]].filter(Boolean).join(" · ");
   return { title: broker.displayName, description, openGraph: { title: broker.displayName, description } };
 }
 
 // Public broker profile: works as the broker's own website and shows only their listings.
-export default async function AgentPage({ params }: PageProps<"/[lang]/agent/[slug]">) {
+export default async function AgentPage({ params, searchParams }: PageProps<"/[lang]/agent/[slug]">) {
   const { slug } = await params;
+  const { category } = parseFilters(await searchParams);
   const lang = await getLocale();
   const dict = await getDictionary();
   const broker = getBroker(slug);
   if (!broker) notFound();
   const own = listingsByBroker(slug);
+  const shown = category ? own.filter((l) => l.category === category) : own;
+  const checked = own.filter((l) => hasBadge(l, "DOCUMENTS_CHECKED")).length;
+  const offered = CATEGORIES.filter((c) => own.some((l) => l.category === c));
+  const chip = (active: boolean) =>
+    `rounded-full border px-3 py-1 text-sm ${active ? "border-brand bg-brand-soft text-brand" : "border-line bg-surface hover:border-brand"}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,6 +62,9 @@ export default async function AgentPage({ params }: PageProps<"/[lang]/agent/[sl
                 {dict.broker.responds(broker.avgResponseMinutes)}
               </span>
             )}
+            {checked > 0 && (
+              <span className="rounded-full border border-line px-2 py-0.5 text-xs">{dict.broker.checkedListings(checked)}</span>
+            )}
           </div>
         </div>
         <div className="flex gap-2 sm:flex-col">
@@ -68,8 +84,20 @@ export default async function AgentPage({ params }: PageProps<"/[lang]/agent/[sl
         <h2 className="text-xl font-semibold">
           {dict.broker.listings} ({own.length})
         </h2>
+        {offered.length > 1 && (
+          <nav className="flex flex-wrap gap-2">
+            <Link href={`/${lang}/agent/${slug}`} className={chip(!category)}>
+              {dict.broker.all}
+            </Link>
+            {offered.map((c) => (
+              <Link key={c} href={`/${lang}/agent/${slug}?category=${c.toLowerCase()}`} className={chip(category === c)}>
+                {dict.categories[c]}
+              </Link>
+            ))}
+          </nav>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {own.map((l) => (
+          {shown.map((l) => (
             <ListingCard
               key={l.code}
               listing={l}
