@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Locale } from "@/i18n/dictionaries";
 import { formatPrice } from "@/lib/format";
-import { getLocality } from "@/lib/repository";
 import type { Listing } from "@/lib/types";
 import { BadgeList } from "./badge-list";
 
@@ -12,7 +11,6 @@ type Labels = {
 };
 
 export function ListingCard({ listing, lang, labels }: { listing: Listing; lang: Locale; labels: Labels }) {
-  const locality = getLocality(listing.localitySlug);
   const monthly = listing.category === "RENTAL" || listing.category === "COMMERCIAL";
 
   return (
@@ -29,7 +27,7 @@ export function ListingCard({ listing, lang, labels }: { listing: Listing; lang:
       </div>
       <div className="line-clamp-2">{listing.title[lang]}</div>
       <div className="text-sm text-muted">
-        {locality?.name[lang]} · {labels.lister[listing.listerType]}
+        {listing.localityName[lang]} · {labels.lister[listing.listerType]}
       </div>
       <BadgeList badges={listing.badges} labels={labels.badges} compact />
     </Link>

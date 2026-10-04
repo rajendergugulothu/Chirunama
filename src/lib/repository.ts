@@ -164,6 +164,12 @@ export async function getBrokerForUser(userId: string): Promise<Broker | null> {
   return row ? withResponseTimes(row) : null;
 }
 
+// For the header menu: whether to offer "My dashboard", without loading the whole profile.
+export async function hasBrokerProfile(userId: string): Promise<boolean> {
+  const row = await prisma.brokerProfile.findUnique({ where: { userId }, select: { id: true } });
+  return row !== null;
+}
+
 // Public pages show live listings only; the broker's own dashboard also sees expired ones.
 export async function listingsByBroker(slug: string, { includeExpired = false } = {}): Promise<Listing[]> {
   const rows = await prisma.listing.findMany({

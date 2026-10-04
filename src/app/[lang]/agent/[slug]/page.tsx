@@ -1,20 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { ListingCard } from "@/components/listing-card";
 import { whatsappLink } from "@/lib/format";
-import { getBroker, getLocality, hasBadge, isPromotable, listingsByBroker, parseFilters } from "@/lib/repository";
+import { hasBadge, isPromotable, parseFilters } from "@/lib/listing-rules";
+import { allLocalities, getBroker as loadBroker, listingsByBroker } from "@/lib/repository";
 import type { Category } from "@/lib/types";
 
 const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
 
+// One query each per request, shared by the metadata and the page.
+const getBroker = cache(loadBroker);
+const liveListings = cache((slug: string) => listingsByBroker(slug));
+
 export async function generateMetadata({ params }: PageProps<"/[lang]/agent/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const broker = getBroker(slug);
+  const broker = await getBroker(slug);
   if (!broker) return {};
   const lang = await getLocale();
-  const own = listingsByBroker(slug);
+  const own = await liveListings(slug);
   // Rich link preview: name, live listing count and a featured property.
   const featured = own.find(isPromotable);
   const description = [`${broker.displayName} · ${own.length} live listings`, featured?.title[lang]].filter(Boolean).join(" · ");
@@ -27,9 +33,10 @@ export default async function AgentPage({ params, searchParams }: PageProps<"/[l
   const { category } = parseFilters(await searchParams);
   const lang = await getLocale();
   const dict = await getDictionary();
-  const broker = getBroker(slug);
+  const broker = await getBroker(slug);
   if (!broker) notFound();
-  const own = listingsByBroker(slug);
+  const [own, localities] = await Promise.all([liveListings(slug), allLocalities()]);
+  const localityNames = new Map(localities.map((l) => [l.slug, l.name[lang]]));
   const shown = category ? own.filter((l) => l.category === category) : own;
   const checked = own.filter((l) => hasBadge(l, "DOCUMENTS_CHECKED")).length;
   const offered = CATEGORIES.filter((c) => own.some((l) => l.category === c));
@@ -49,7 +56,7 @@ export default async function AgentPage({ params, searchParams }: PageProps<"/[l
             {broker.reraNumber && ` · ${dict.broker.rera} ${broker.reraNumber}`}
           </p>
           <p className="text-sm">
-            {dict.broker.serves}: {broker.localitySlugs.map((s) => getLocality(s)?.name[lang]).join(", ")}
+            {dict.broker.serves}: {broker.localitySlugs.map((s) => localityNames.get(s)).filter(Boolean).join(", ")}
           </p>
           <div className="flex flex-wrap gap-1">
             {broker.verified && (

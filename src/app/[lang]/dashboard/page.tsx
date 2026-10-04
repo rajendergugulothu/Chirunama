@@ -1,16 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { connection } from "next/server";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { CopyButton } from "@/components/copy-button";
+import { requireUser } from "@/lib/auth/guards";
 import { daysSince, formatRupees, whatsappLink } from "@/lib/format";
+import { localityAverage } from "@/lib/listing-rules";
 import { classifiedText, sharePath } from "@/lib/marketing";
-import { getBroker, getLocality, leadsForBroker, listingsByBroker, localityAverage, statsFor } from "@/lib/repository";
+import {
+  allLocalities,
+  getBrokerForUser,
+  leadsForBroker,
+  listingStats,
+  listingsByBroker,
+  supportContact,
+} from "@/lib/repository";
 import type { LeadSource, LeadStage } from "@/lib/types";
 
-// Until sign-in exists, the dashboard shows one sample broker's private view.
-const SAMPLE_BROKER = "ramesh-realty";
 const STAGES: LeadStage[] = ["NEW", "CONTACTED", "VISIT_BOOKED", "CLOSED"];
 const SHARE_CHANNELS: LeadSource[] = ["INSTAGRAM", "WHATSAPP", "FACEBOOK", "QR"];
 
@@ -19,18 +24,28 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: dict.dashboard.title, robots: { index: false } };
 }
 
+// The signed-in broker's own private view: their listings, leads (with enquirers' phone
+// numbers), stats and share kit. Everything is looked up from the session, never the URL.
 export default async function DashboardPage() {
-  await connection(); // private, per-broker data: render on each request
   const lang = await getLocale();
+  const user = await requireUser(`/${lang}/dashboard`);
   const dict = await getDictionary();
   const d = dict.dashboard;
-  const broker = getBroker(SAMPLE_BROKER);
-  if (!broker) notFound();
+  const broker = await getBrokerForUser(user.id);
+  if (!broker) {
+    return <NoProfile title={d.title} message={d.noProfile} cta={d.noProfileCta} support={await supportContact()} />;
+  }
 
-  const own = listingsByBroker(broker.slug, { includeExpired: true });
+  const [own, leads, localities] = await Promise.all([
+    listingsByBroker(broker.slug, { includeExpired: true }),
+    leadsForBroker(broker.slug),
+    allLocalities(),
+  ]);
+  const stats = await listingStats(own.map((l) => l.code));
+  const statsFor = (code: string) => stats.get(code) ?? { views: 0, saves: 0 };
+  const localityBySlug = new Map(localities.map((l) => [l.slug, l]));
   const live = own.filter((l) => l.status === "LIVE");
   const units = { month: dict.listing.perMonth, sqft: dict.locality.perSqft, sqyd: dict.locality.perSqyd };
-  const leads = leadsForBroker(broker.slug);
   const views = own.reduce((sum, l) => sum + statsFor(l.code).views, 0);
   const time = new Intl.DateTimeFormat(lang === "te" ? "te-IN" : "en-IN", {
     day: "numeric",
@@ -40,7 +55,7 @@ export default async function DashboardPage() {
     timeZone: "Asia/Kolkata",
   });
 
-  const stats = [
+  const totals = [
     { label: d.stats.newLeads, value: leads.filter((l) => l.stage === "NEW").length },
     { label: d.stats.visits, value: leads.filter((l) => l.stage === "VISIT_BOOKED").length },
     { label: d.stats.live, value: live.length },
@@ -50,10 +65,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-1 flex-col gap-1">
-          <h1 className="text-2xl font-bold">{d.title}</h1>
-          <p className="text-sm text-muted">{d.sample}</p>
-        </div>
+        <h1 className="flex-1 text-2xl font-bold">{d.title}</h1>
         <Link
           href={`/${lang}/agent/${broker.slug}`}
           className="rounded-full border border-line bg-surface px-3 py-1 text-sm hover:border-brand"
@@ -64,7 +76,7 @@ export default async function DashboardPage() {
       </header>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {stats.map((s) => (
+        {totals.map((s) => (
           <div key={s.label} className="rounded-xl border border-line bg-surface p-4">
             <div className="text-sm text-muted">{s.label}</div>
             <div className="text-2xl font-semibold tabular-nums">{s.value.toLocaleString("en-IN")}</div>
@@ -130,7 +142,7 @@ export default async function DashboardPage() {
               {own.map((l) => {
                 const s = statsFor(l.code);
                 const days = daysSince(l.lastConfirmedAt);
-                const average = localityAverage(l, getLocality(l.localitySlug));
+                const average = localityAverage(l, localityBySlug.get(l.localitySlug));
                 return (
                   <tr key={l.code} className="border-b border-line last:border-0">
                     <td className="p-3">
@@ -179,7 +191,7 @@ export default async function DashboardPage() {
           <h2 className="text-xl font-semibold">{d.classified}</h2>
           <ul className="flex flex-col gap-2">
             {live.map((l) => {
-              const text = classifiedText(l, getLocality(l.localitySlug));
+              const text = classifiedText(l, localityBySlug.get(l.localitySlug));
               return (
                 <li key={l.code} className="flex items-start gap-2 rounded-lg border border-line bg-surface p-3 text-sm">
                   <p className="flex-1" lang="te">
@@ -193,5 +205,18 @@ export default async function DashboardPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+// Signed in, but this number has no broker profile: no data, just a way to ask for one.
+function NoProfile({ title, message, cta, support }: { title: string; message: string; cta: string; support: string }) {
+  return (
+    <section className="mx-auto flex w-full max-w-md flex-col gap-3 rounded-xl border border-line bg-surface p-5">
+      <h1 className="text-xl font-bold">{title}</h1>
+      <p>{message}</p>
+      <a href={`https://wa.me/${support}`} className="w-fit rounded-lg bg-brand px-4 py-2 font-medium text-surface">
+        {cta}
+      </a>
+    </section>
   );
 }

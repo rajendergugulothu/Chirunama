@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { LEAD_SOURCE_COOKIE, LEAD_SOURCE_MAX_AGE, parseLeadSource } from "@/lib/attribution-rules";
 
 const locales = ["te", "en"];
 
@@ -21,6 +22,21 @@ function preferredLocale(request: NextRequest): string {
   return "te";
 }
 
+// Share links carry ?src=<channel> (any case); remember the latest valid one so a later
+// enquiry can be attributed to it. Unknown values are ignored.
+function withLeadSource(request: NextRequest, response: NextResponse): NextResponse {
+  const source = parseLeadSource(request.nextUrl.searchParams.get("src"));
+  if (source) {
+    response.cookies.set(LEAD_SOURCE_COOKIE, source, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: LEAD_SOURCE_MAX_AGE,
+    });
+  }
+  return response;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasLocale = locales.some((l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`));
@@ -28,11 +44,13 @@ export function proxy(request: NextRequest) {
     // Remember the last language the reader chose, including via the one-tap switch.
     const response = NextResponse.next();
     response.cookies.set("lang", pathname.split("/")[1], { path: "/", maxAge: 60 * 60 * 24 * 365 });
-    return response;
+    return withLeadSource(request, response);
   }
 
-  request.nextUrl.pathname = `/${preferredLocale(request)}${pathname === "/" ? "" : pathname}`;
-  return NextResponse.redirect(request.nextUrl);
+  // The redirect keeps the query string, including ?src=.
+  const url = request.nextUrl.clone();
+  url.pathname = `/${preferredLocale(request)}${pathname === "/" ? "" : pathname}`;
+  return withLeadSource(request, NextResponse.redirect(url));
 }
 
 export const config = {

@@ -9,8 +9,13 @@ const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
 export default async function Home() {
   const lang = await getLocale();
   const dict = await getDictionary();
-  const latest = promotedListings().slice(0, 3);
-  const checkedPlots = promotedListings({ category: "PLOT" }).slice(0, 3);
+  const [promoted, plots, localities] = await Promise.all([
+    promotedListings(),
+    promotedListings({ category: "PLOT" }),
+    allLocalities(),
+  ]);
+  const latest = promoted.slice(0, 3);
+  const checkedPlots = plots.slice(0, 3);
   const labels = { perMonth: dict.listing.perMonth, lister: dict.lister, badges: dict.badges };
 
   return (
@@ -38,7 +43,7 @@ export default async function Home() {
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">{dict.home.localities}</h2>
         <div className="flex flex-wrap gap-2">
-          {allLocalities().map((l) => (
+          {localities.map((l) => (
             <Link
               key={l.slug}
               href={`/${lang}/locality/${l.slug}`}

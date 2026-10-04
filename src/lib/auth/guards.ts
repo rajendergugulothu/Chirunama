@@ -19,6 +19,13 @@ export function safeNext(raw: unknown, lang: string): string {
   return raw;
 }
 
+// Where to land after signing in: safeNext, except the login page itself, which would send a
+// signed-in user straight back round.
+export function afterSignInPath(raw: unknown, lang: string): string {
+  const path = safeNext(raw, lang);
+  return /^\/[a-z]{2}\/login(?:[/?#]|$)/.test(path) ? `/${lang}` : path;
+}
+
 // The signed-in user, or a redirect to /{lang}/login?next=<nextPath>.
 export async function requireUser(nextPath: string): Promise<SessionUser> {
   const session = await getSession();

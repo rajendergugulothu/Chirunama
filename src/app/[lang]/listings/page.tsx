@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { ListingCard } from "@/components/listing-card";
-import { allLocalities, parseFilters, searchListings } from "@/lib/repository";
+import { parseFilters } from "@/lib/listing-rules";
+import { allLocalities, searchListings } from "@/lib/repository";
 import type { Category, Furnishing } from "@/lib/types";
 
 const CATEGORIES: Category[] = ["RENTAL", "SALE", "PLOT", "COMMERCIAL"];
@@ -16,7 +17,7 @@ export default async function ListingsPage({ searchParams }: PageProps<"/[lang]/
   const lang = await getLocale();
   const dict = await getDictionary();
   const filters = parseFilters(await searchParams);
-  const results = searchListings(filters);
+  const [results, localities] = await Promise.all([searchListings(filters), allLocalities()]);
   const field = "rounded-lg border border-line bg-surface px-2 py-1.5";
 
   return (
@@ -38,7 +39,7 @@ export default async function ListingsPage({ searchParams }: PageProps<"/[lang]/
           {dict.filters.locality}
           <select name="locality" defaultValue={filters.locality ?? ""} className={field}>
             <option value="">{dict.filters.any}</option>
-            {allLocalities().map((l) => (
+            {localities.map((l) => (
               <option key={l.slug} value={l.slug}>
                 {l.name[lang]}
               </option>

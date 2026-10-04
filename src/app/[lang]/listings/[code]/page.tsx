@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { BadgeList } from "@/components/badge-list";
 import { formatPrice, formatRupees, whatsappLink } from "@/lib/format";
-import { PLOT_DOCUMENTS, getBroker, getListing, getLocality, hasBadge, supportContact } from "@/lib/repository";
+import { PLOT_DOCUMENTS, hasBadge } from "@/lib/listing-rules";
+import { getBroker, getListing as loadListing, supportContact } from "@/lib/repository";
+
+// One query per request, shared by the metadata and the page.
+const getListing = cache(loadListing);
 
 export async function generateMetadata({ params }: PageProps<"/[lang]/listings/[code]">): Promise<Metadata> {
   const { code } = await params;
   const lang = await getLocale();
-  const listing = getListing(code);
+  const listing = await getListing(code);
   if (!listing) return {};
   // Rich link previews for WhatsApp, Instagram and Facebook shares.
   return {
@@ -23,11 +28,13 @@ export default async function ListingPage({ params }: PageProps<"/[lang]/listing
   const { code } = await params;
   const lang = await getLocale();
   const dict = await getDictionary();
-  const listing = getListing(code);
+  const listing = await getListing(code);
   if (!listing) notFound();
 
-  const locality = getLocality(listing.localitySlug);
-  const broker = listing.brokerSlug ? getBroker(listing.brokerSlug) : undefined;
+  const [broker, support] = await Promise.all([
+    listing.brokerSlug ? getBroker(listing.brokerSlug) : undefined,
+    supportContact(),
+  ]);
   const monthly = listing.category === "RENTAL" || listing.category === "COMMERCIAL";
   const enquiry = dict.listing.enquiry(listing.code);
   const documentsChecked = hasBadge(listing, "DOCUMENTS_CHECKED");
@@ -44,7 +51,7 @@ export default async function ListingPage({ params }: PageProps<"/[lang]/listing
         </div>
         <h1 className="text-2xl font-bold">{listing.title[lang]}</h1>
         <p className="text-muted">
-          {locality?.name[lang]} · {dict.categories[listing.category]}
+          {listing.localityName[lang]} · {dict.categories[listing.category]}
         </p>
         <p>{listing.description[lang]}</p>
 
@@ -167,7 +174,7 @@ export default async function ListingPage({ params }: PageProps<"/[lang]/listing
           {dict.listing.confirmed} {listing.lastConfirmedAt}
         </p>
         <a
-          href={whatsappLink(supportContact(), dict.listing.reportText(listing.code))}
+          href={whatsappLink(support, dict.listing.reportText(listing.code))}
           className="text-xs text-muted underline hover:text-accent"
         >
           {dict.listing.report}

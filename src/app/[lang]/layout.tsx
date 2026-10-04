@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getDictionary, hasLocale, locales } from "@/i18n/dictionaries";
 import { LanguageSwitch } from "@/components/language-switch";
+import { UserMenu } from "@/components/user-menu";
 import "../globals.css";
 
 const notoSans = Noto_Sans({ variable: "--font-latin", subsets: ["latin"] });
@@ -13,6 +14,10 @@ const notoTelugu = Noto_Sans_Telugu({ variable: "--font-telugu", subsets: ["telu
 export async function generateStaticParams() {
   return locales.map((lang) => ({ lang }));
 }
+
+// Every page reads Postgres (and the header reads the session), so nothing is prerendered at
+// build time, when there is no database.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const dict = await getDictionary();
@@ -33,19 +38,19 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
     <html lang={lang} className={`${notoSans.variable} ${notoTelugu.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <header className="border-b border-line bg-surface">
-          <nav className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
+          <nav className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3 sm:gap-4">
             <Link href={`/${lang}`} className="text-lg font-bold text-brand">
               {dict.brand}
             </Link>
             <Link href={`/${lang}/listings`} className="text-sm hover:underline">
               {dict.nav.search}
             </Link>
-            <Link href={`/${lang}/dashboard`} className="text-sm hover:underline">
-              {dict.nav.brokers}
-            </Link>
             <span className="ml-auto" />
             <Suspense>
               <LanguageSwitch current={lang} label={dict.switchTo} />
+            </Suspense>
+            <Suspense>
+              <UserMenu lang={lang} dict={dict} />
             </Suspense>
           </nav>
         </header>

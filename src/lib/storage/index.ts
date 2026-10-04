@@ -10,7 +10,7 @@ import { LocalDiskStorage } from "./local";
 
 export interface Storage {
   put(key: string, data: Uint8Array): Promise<void>;
-  get(key: string): Promise<Uint8Array | null>;
+  get(key: string): Promise<Uint8Array<ArrayBuffer> | null>;
   delete(key: string): Promise<void>;
 }
 
@@ -44,7 +44,8 @@ export function newKey(prefix: KeyPrefix, ext: string, now: Date = new Date()): 
 let current: { root: string; storage: Storage } | undefined;
 
 export function storage(): Storage {
-  const root = path.resolve(process.env.STORAGE_DIR || DEFAULT_STORAGE_DIR);
+  // Read at run time; tells the bundler not to trace (and ship) the whole project for it.
+  const root = path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR || DEFAULT_STORAGE_DIR);
   if (current?.root !== root) current = { root, storage: new LocalDiskStorage(root) };
   return current.storage;
 }

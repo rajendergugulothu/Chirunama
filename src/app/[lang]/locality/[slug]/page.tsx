@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { getDictionary, getLocale } from "@/i18n/dictionaries";
 import { ListingCard } from "@/components/listing-card";
 import { formatRupees } from "@/lib/format";
-import { allLocalities, getLocality, searchListings } from "@/lib/repository";
+import { getLocality as loadLocality, searchListings } from "@/lib/repository";
 
-export function generateStaticParams() {
-  return allLocalities().map((l) => ({ slug: l.slug }));
-}
+// One query per request, shared by the metadata and the page.
+const getLocality = cache(loadLocality);
 
 export async function generateMetadata({ params }: PageProps<"/[lang]/locality/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const lang = await getLocale();
-  const locality = getLocality(slug);
+  const locality = await getLocality(slug);
   return locality ? { title: locality.name[lang] } : {};
 }
 
@@ -21,9 +21,9 @@ export default async function LocalityPage({ params }: PageProps<"/[lang]/locali
   const { slug } = await params;
   const lang = await getLocale();
   const dict = await getDictionary();
-  const locality = getLocality(slug);
+  const locality = await getLocality(slug);
   if (!locality) notFound();
-  const live = searchListings({ locality: slug });
+  const live = await searchListings({ locality: slug });
 
   const stats = [
     locality.avgRentPerMonth && { label: dict.locality.avgRent, value: `${formatRupees(locality.avgRentPerMonth)} ${dict.listing.perMonth}` },

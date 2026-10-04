@@ -32,7 +32,7 @@ export class LocalDiskStorage implements Storage {
     }
   }
 
-  async get(key: string): Promise<Uint8Array | null> {
+  async get(key: string): Promise<Uint8Array<ArrayBuffer> | null> {
     const full = this.pathFor(key);
     try {
       return new Uint8Array(await readFile(full));
