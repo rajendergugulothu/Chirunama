@@ -79,8 +79,10 @@ export async function requestOtp({
   const ipHash = ip ? hashIp(ip) : null;
   const code = generateCode();
 
-  // Serialise requests per phone so parallel submits cannot slip past the limits.
+  // Serialise requests per IP and per phone so parallel submits cannot slip past the limits.
+  // The IP lock is always taken before the phone lock, so the lock order never inverts.
   const limited = await prisma.$transaction(async (tx) => {
+    if (ipHash) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`otp-ip:${ipHash}`}))`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`otp:${phone}`}))`;
     const now = Date.now();
     const since = (ms: number) => new Date(now - ms);

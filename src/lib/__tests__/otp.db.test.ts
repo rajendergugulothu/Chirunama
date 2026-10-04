@@ -225,6 +225,62 @@ describe("requestOtp rate limits", () => {
     expect(results.filter((r) => !r.ok && r.error === "wait")).toHaveLength(4);
     expect(await prisma.otpChallenge.count({ where: { phone: full(phone) } })).toBe(1);
   });
+
+  it("does not let parallel requests from one IP slip past the per-IP limit", async () => {
+    const ip = "192.0.2.77";
+    // 19 codes already asked for from this IP in the last hour, for other numbers.
+    await prisma.otpChallenge.createMany({
+      data: Array.from({ length: 19 }, () => ({
+        phone: full(freshPhone()),
+        codeHash: "x",
+        ipHash: hashIp(ip),
+        expiresAt: new Date(NOW.getTime() - 5 * MINUTE),
+        createdAt: new Date(NOW.getTime() - 10 * MINUTE),
+      })),
+    });
+    // One more is allowed; a burst of five, each for a different number, must not all get in.
+    const results = await Promise.all(Array.from({ length: 5 }, () => requestOtp({ phone: freshPhone(), ip, lang: "en" })));
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok && r.error === "tooMany")).toHaveLength(4);
+    expect(await prisma.otpChallenge.count({ where: { ipHash: hashIp(ip) } })).toBe(20);
+  });
+
+  it("keeps both limits, without a lock error, when parallel requests share numbers and IPs, some with no IP", async () => {
+    const busyIp = "192.0.2.88";
+    const shared = freshPhone();
+    // The busy IP has one code left this hour.
+    await prisma.otpChallenge.createMany({
+      data: Array.from({ length: 19 }, () => ({
+        phone: full(freshPhone()),
+        codeHash: "x",
+        ipHash: hashIp(busyIp),
+        expiresAt: new Date(NOW.getTime() - 5 * MINUTE),
+        createdAt: new Date(NOW.getTime() - 10 * MINUTE),
+      })),
+    });
+    const fresh = Array.from({ length: 4 }, () => freshPhone());
+    const requests = [
+      ...fresh.map((phone) => ({ phone, ip: busyIp })), // new numbers from the busy IP
+      ...Array.from({ length: 4 }, () => ({ phone: shared, ip: freshIp() })), // one number from new IPs
+      { phone: shared, ip: null }, // one number with no IP at all
+      { phone: shared, ip: null },
+      { phone: shared, ip: busyIp }, // one number from the busy IP
+      { phone: shared, ip: busyIp },
+    ];
+
+    // allSettled so a lock error (e.g. "deadlock detected") shows up as a rejection, not a crash.
+    const settled = await Promise.allSettled(requests.map(({ phone, ip }) => requestOtp({ phone, ip, lang: "en" })));
+    expect(settled.filter((s) => s.status === "rejected")).toEqual([]);
+    const results = settled.map((s) => (s as PromiseFulfilledResult<Awaited<ReturnType<typeof requestOtp>>>).value);
+    for (const r of results) expect(r.ok || r.error === "wait" || r.error === "tooMany").toBe(true);
+
+    // The busy IP reaches exactly its limit, the shared number gets exactly one code (cooldown),
+    // and every ok answer stands for exactly one stored challenge.
+    expect(await prisma.otpChallenge.count({ where: { ipHash: hashIp(busyIp) } })).toBe(20);
+    expect(await prisma.otpChallenge.count({ where: { phone: full(shared) } })).toBe(1);
+    const created = await prisma.otpChallenge.count({ where: { phone: { in: [shared, ...fresh].map(full) } } });
+    expect(results.filter((r) => r.ok)).toHaveLength(created);
+  });
 });
 
 describe("verifyOtp", () => {
@@ -258,6 +314,16 @@ describe("verifyOtp", () => {
     expect(results.filter((r) => !r.ok && r.error === "expired")).toHaveLength(3);
     expect((await prisma.otpChallenge.findFirstOrThrow({ where: { phone: full(phone) } })).attempts).toBe(5);
     expect(await verifyOtp({ phone, code })).toEqual({ ok: false, error: "expired" });
+  });
+
+  it("accepts the right code only once when it is submitted twice at the same time", async () => {
+    const phone = freshPhone();
+    const code = await codeFor(phone);
+    const results = await Promise.all(Array.from({ length: 4 }, () => verifyOtp({ phone, code })));
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok && r.error === "expired")).toHaveLength(3);
+    const user = await prisma.user.findUniqueOrThrow({ where: { phone: full(phone) } });
+    expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
   });
 
   it("refuses a code older than 5 minutes", async () => {
